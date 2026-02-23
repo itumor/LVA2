@@ -1,0 +1,683 @@
+[
+  {
+    "id": "listen_announcements_001",
+    "skill": "listening",
+    "taskType": "mcq",
+    "topic": "services",
+    "promptLv": "Noklausies sešus paziņojumus un izvēlies pareizo atbildi.",
+    "promptEn": "Listen to six announcements and choose the correct answer.",
+    "audioRef": "a_2_limenis_audio.mp3#announcements",
+    "transcript": "Stacijas paziņojumi, veikala ziņas un sabiedriskie paziņojumi.",
+    "questions": [
+      {
+        "id": "q1",
+        "stemLv": "Kur iziet vilciens uz Jelgavu?",
+        "stemEn": "Where does the train to Jelgava depart from?",
+        "options": [
+          "No 2. platformas",
+          "No 4. platformas",
+          "No 6. platformas"
+        ],
+        "correctAnswer": "No 4. platformas",
+        "evidenceSpan": {
+          "start": 10,
+          "end": 32
+        }
+      },
+      {
+        "id": "q2",
+        "stemLv": "Cikos aizver aptieku?",
+        "stemEn": "When does the pharmacy close?",
+        "options": [
+          "18:00",
+          "19:30",
+          "20:00"
+        ],
+        "correctAnswer": "19:30",
+        "evidenceSpan": {
+          "start": 42,
+          "end": 60
+        }
+      },
+      {
+        "id": "q3",
+        "stemLv": "Cik maksā dienas biļete?",
+        "stemEn": "How much is the day ticket?",
+        "options": [
+          "1.50 EUR",
+          "2.00 EUR",
+          "2.50 EUR"
+        ],
+        "correctAnswer": "2.00 EUR",
+        "evidenceSpan": {
+          "start": 61,
+          "end": 83
+        }
+      },
+      {
+        "id": "q4",
+        "stemLv": "Kur notiek koncerts?",
+        "stemEn": "Where is the concert?",
+        "options": [
+          "Kultūras namā",
+          "Skolā",
+          "Sporta hallē"
+        ],
+        "correctAnswer": "Kultūras namā",
+        "evidenceSpan": {
+          "start": 84,
+          "end": 110
+        }
+      },
+      {
+        "id": "q5",
+        "stemLv": "Kuru autobusu vajag?",
+        "stemEn": "Which bus is needed?",
+        "options": [
+          "3",
+          "5",
+          "7"
+        ],
+        "correctAnswer": "5",
+        "evidenceSpan": {
+          "start": 111,
+          "end": 135
+        }
+      },
+      {
+        "id": "q6",
+        "stemLv": "Kāda ir jaunā darba laika sākums?",
+        "stemEn": "What is the new opening time?",
+        "options": [
+          "8:00",
+          "8:30",
+          "9:00"
+        ],
+        "correctAnswer": "8:30",
+        "evidenceSpan": {
+          "start": 136,
+          "end": 158
+        }
+      }
+    ],
+    "points": 6,
+    "metadata": {
+      "examPart": 1,
+      "source": "a_2_limenis.pdf",
+      "version": "seed-v1",
+      "officialPart": 1,
+      "officialOrder": 1,
+      "answerKeyVersion": "seed-v1"
+    }
+  },
+  {
+    "id": "listen_dialog_true_false_001",
+    "skill": "listening",
+    "taskType": "true_false",
+    "topic": "travel",
+    "promptLv": "Noklausies dialogu un atzīmē apgalvojumus kā Patiesi/Nepatiesi.",
+    "promptEn": "Listen to the dialogue and mark statements as True/False.",
+    "audioRef": "a_2_limenis_audio.mp3#dialogue",
+    "transcript": "Divi draugi runā par ceļojumu un biļetēm.",
+    "questions": [
+      {
+        "id": "q1",
+        "stemLv": "Viņi brauks sestdien.",
+        "stemEn": "They will travel on Saturday.",
+        "correctAnswer": true,
+        "evidenceRef": "segment-1"
+      },
+      {
+        "id": "q2",
+        "stemLv": "Biļetes pērk tikai internetā.",
+        "stemEn": "Tickets are bought only online.",
+        "correctAnswer": false,
+        "evidenceRef": "segment-2"
+      },
+      {
+        "id": "q3",
+        "stemLv": "Ceļš ilgst apmēram divas stundas.",
+        "stemEn": "The trip takes around two hours.",
+        "correctAnswer": true,
+        "evidenceRef": "segment-3"
+      },
+      {
+        "id": "q4",
+        "stemLv": "Viņi dosies bez bagāžas.",
+        "stemEn": "They will go without luggage.",
+        "correctAnswer": false,
+        "evidenceRef": "segment-4"
+      }
+    ],
+    "points": 4,
+    "metadata": {
+      "examPart": 1,
+      "source": "a_2_limenis.pdf",
+      "version": "seed-v1",
+      "officialPart": 1,
+      "officialOrder": 2,
+      "answerKeyVersion": "seed-v1"
+    }
+  },
+  {
+    "id": "listen_short_dialog_fill_001",
+    "skill": "listening",
+    "taskType": "fill_blank",
+    "topic": "shopping",
+    "promptLv": "Noklausies 5 īsus dialogus un ieraksti trūkstošo vārdu vai skaitli.",
+    "promptEn": "Listen to 5 short dialogues and fill in the missing word or number.",
+    "audioRef": "a_2_limenis_audio.mp3#short-dialogues",
+    "transcript": "Dialogi par pirkumiem, laiku, datumiem un cenām.",
+    "questions": [
+      {
+        "id": "q1",
+        "stemLv": "Veikals aizveras plkst. ____.",
+        "stemEn": "The shop closes at ____.",
+        "correctAnswer": "21:00",
+        "evidenceRef": "segment-1"
+      },
+      {
+        "id": "q2",
+        "stemLv": "Piens maksā ____ eiro.",
+        "stemEn": "Milk costs ____ euro.",
+        "correctAnswer": "1.35",
+        "evidenceRef": "segment-2"
+      },
+      {
+        "id": "q3",
+        "stemLv": "Vizīte ir ____ datumā.",
+        "stemEn": "The appointment is on the ____ date.",
+        "correctAnswer": "15",
+        "evidenceRef": "segment-3"
+      },
+      {
+        "id": "q4",
+        "stemLv": "Autobuss atnāk pēc ____ minūtēm.",
+        "stemEn": "The bus arrives in ____ minutes.",
+        "correctAnswer": "12",
+        "evidenceRef": "segment-4"
+      },
+      {
+        "id": "q5",
+        "stemLv": "Jāņem ____ soma.",
+        "stemEn": "Take a ____ bag.",
+        "correctAnswer": "lielā",
+        "evidenceRef": "segment-5"
+      }
+    ],
+    "points": 5,
+    "metadata": {
+      "examPart": 1,
+      "source": "a_2_limenis.pdf",
+      "version": "seed-v1",
+      "officialPart": 1,
+      "officialOrder": 3,
+      "answerKeyVersion": "seed-v1"
+    }
+  },
+  {
+    "id": "reading_short_texts_001",
+    "skill": "reading",
+    "taskType": "matching",
+    "topic": "free_time",
+    "promptLv": "Izlasi īsus tekstus un savieno ar atbilstošiem apgalvojumiem.",
+    "promptEn": "Read short texts and match with the correct statements.",
+    "questions": [
+      {
+        "id": "q1",
+        "texts": [
+          {
+            "id": "A",
+            "contentLv": "Muzejs pirmdienās ir slēgts.",
+            "contentEn": "The museum is closed on Mondays."
+          },
+          {
+            "id": "B",
+            "contentLv": "Sporta centrs strādā līdz 22:00.",
+            "contentEn": "The sports center is open until 22:00."
+          },
+          {
+            "id": "C",
+            "contentLv": "Bibliotēkā sestdien ir saīsināts darba laiks.",
+            "contentEn": "The library has shorter hours on Saturday."
+          }
+        ],
+        "statements": [
+          {
+            "id": "s1",
+            "textLv": "Vakarā var apmeklēt sporta centru.",
+            "answer": "B",
+            "evidenceRef": "B"
+          },
+          {
+            "id": "s2",
+            "textLv": "Nedēļas sākumā muzeju nevar apmeklēt.",
+            "answer": "A",
+            "evidenceRef": "A"
+          },
+          {
+            "id": "s3",
+            "textLv": "Brīvdienā bibliotēka ir atvērta īsāk.",
+            "answer": "C",
+            "evidenceRef": "C"
+          },
+          {
+            "id": "s4",
+            "textLv": "Muzejs strādā katru dienu.",
+            "answer": "none",
+            "evidenceRef": "none"
+          }
+        ]
+      }
+    ],
+    "points": 4,
+    "metadata": {
+      "examPart": 2,
+      "source": "a_2_limenis.pdf",
+      "version": "seed-v1",
+      "officialPart": 2,
+      "officialOrder": 4,
+      "answerKeyVersion": "seed-v1"
+    }
+  },
+  {
+    "id": "reading_match_ads_001",
+    "skill": "reading",
+    "taskType": "matching",
+    "topic": "services",
+    "promptLv": "Izlasi situācijas un izvēlies atbilstošo sludinājumu.",
+    "promptEn": "Read situations and choose the matching ad.",
+    "questions": [
+      {
+        "id": "q1",
+        "ads": [
+          {
+            "id": "A",
+            "textLv": "Velosipēdu remonts darba dienās 9:00-18:00"
+          },
+          {
+            "id": "B",
+            "textLv": "Bērnu peldēšanas nodarbības sestdienās"
+          },
+          {
+            "id": "C",
+            "textLv": "Datoru kursi iesācējiem vakaros"
+          },
+          {
+            "id": "D",
+            "textLv": "Mājas uzkopšanas pakalpojumi"
+          },
+          {
+            "id": "E",
+            "textLv": "Ātrā šuvēja - apģērba labošana"
+          },
+          {
+            "id": "F",
+            "textLv": "Privāts angļu valodas skolotājs"
+          }
+        ],
+        "situations": [
+          {
+            "id": "s1",
+            "textLv": "Jāsaīsina bikses līdz rītdienai.",
+            "answer": "E",
+            "evidenceRef": "E"
+          },
+          {
+            "id": "s2",
+            "textLv": "Vēlies mācīties datorprasmes pēc darba.",
+            "answer": "C",
+            "evidenceRef": "C"
+          },
+          {
+            "id": "s3",
+            "textLv": "Tavs bērns grib mācīties peldēt.",
+            "answer": "B",
+            "evidenceRef": "B"
+          },
+          {
+            "id": "s4",
+            "textLv": "Dzīvoklim vajag regulāru tīrīšanu.",
+            "answer": "D",
+            "evidenceRef": "D"
+          },
+          {
+            "id": "s5",
+            "textLv": "Jāsalabo velosipēds šonedēļ.",
+            "answer": "A",
+            "evidenceRef": "A"
+          },
+          {
+            "id": "s6",
+            "textLv": "Vajag individuālas valodas nodarbības.",
+            "answer": "F",
+            "evidenceRef": "F"
+          }
+        ]
+      }
+    ],
+    "points": 6,
+    "metadata": {
+      "examPart": 2,
+      "source": "a_2_limenis.pdf",
+      "version": "seed-v1",
+      "officialPart": 2,
+      "officialOrder": 5,
+      "answerKeyVersion": "seed-v1"
+    }
+  },
+  {
+    "id": "reading_cloze_001",
+    "skill": "reading",
+    "taskType": "cloze",
+    "topic": "food",
+    "promptLv": "Izvēlies pareizo vārdu, lai pabeigtu tekstu.",
+    "promptEn": "Choose the correct word to complete the text.",
+    "questions": [
+      {
+        "id": "q1",
+        "stemLv": "Katru rītu es ____ brokastis mājās.",
+        "options": [
+          "ēdu",
+          "dzīvoju",
+          "skrienu"
+        ],
+        "correctAnswer": "ēdu",
+        "hint": "verbs"
+      },
+      {
+        "id": "q2",
+        "stemLv": "Pusdienās mēs bieži pērkam ____.",
+        "options": [
+          "zupu",
+          "auksts",
+          "ātri"
+        ],
+        "correctAnswer": "zupu",
+        "hint": "nouns"
+      },
+      {
+        "id": "q3",
+        "stemLv": "Veikalā es izvēlos ____ maizi.",
+        "options": [
+          "svaigu",
+          "svaigi",
+          "svaigā"
+        ],
+        "correctAnswer": "svaigu",
+        "hint": "adjectives"
+      },
+      {
+        "id": "q4",
+        "stemLv": "Vakarā mēs dzeram ____ tēju.",
+        "options": [
+          "silta",
+          "siltu",
+          "silti"
+        ],
+        "correctAnswer": "siltu",
+        "hint": "adjectives"
+      },
+      {
+        "id": "q5",
+        "stemLv": "Brīvdienās gatavoju ēdienu kopā ar ____.",
+        "options": [
+          "ģimeni",
+          "ģimene",
+          "ģimenē"
+        ],
+        "correctAnswer": "ģimeni",
+        "hint": "cases"
+      }
+    ],
+    "points": 5,
+    "metadata": {
+      "examPart": 2,
+      "source": "a_2_limenis.pdf",
+      "version": "seed-v1",
+      "officialPart": 2,
+      "officialOrder": 6,
+      "answerKeyVersion": "seed-v1"
+    }
+  },
+  {
+    "id": "writing_picture_sentences_001",
+    "skill": "writing",
+    "taskType": "picture_sentence",
+    "topic": "daily_life",
+    "promptLv": "Apskati 4 attēlus un uzraksti par katru vismaz 5 vārdus.",
+    "promptEn": "Look at 4 pictures and write at least 5 words for each.",
+    "questions": [
+      {
+        "id": "q1",
+        "imageHint": "ģimene virtuvē",
+        "imageUrl": "/images/writing-q1.svg",
+        "minWords": 5
+      },
+      {
+        "id": "q2",
+        "imageHint": "cilvēks autobusā",
+        "imageUrl": "/images/writing-q2.svg",
+        "minWords": 5
+      },
+      {
+        "id": "q3",
+        "imageHint": "tirgus laukums",
+        "imageUrl": "/images/writing-q3.svg",
+        "minWords": 5
+      },
+      {
+        "id": "q4",
+        "imageHint": "parks ziemā",
+        "imageUrl": "/images/writing-q4.svg",
+        "minWords": 5
+      }
+    ],
+    "points": 4,
+    "metadata": {
+      "examPart": 3,
+      "source": "a_2_limenis.pdf",
+      "version": "seed-v1",
+      "officialPart": 3,
+      "officialOrder": 7,
+      "answerKeyVersion": "seed-v1"
+    }
+  },
+  {
+    "id": "writing_word_forms_001",
+    "skill": "writing",
+    "taskType": "word_form",
+    "topic": "grammar",
+    "promptLv": "Aizpildi teikumus ar pareizo vārda formu.",
+    "promptEn": "Fill in the sentences with the correct word form.",
+    "questions": [
+      {
+        "id": "q1",
+        "stemLv": "Es dzīvoju ____ (Rīga).",
+        "correctAnswer": "Rīgā"
+      },
+      {
+        "id": "q2",
+        "stemLv": "Mēs ejam uz ____ (veikals).",
+        "correctAnswer": "veikalu"
+      },
+      {
+        "id": "q3",
+        "stemLv": "Viņa lasa grāmatu par ____ (ceļojums).",
+        "correctAnswer": "ceļojumu"
+      },
+      {
+        "id": "q4",
+        "stemLv": "Šodien runāju ar ____ (skolotāja).",
+        "correctAnswer": "skolotāju"
+      },
+      {
+        "id": "q5",
+        "stemLv": "Mans draugs strādā ____ (banka).",
+        "correctAnswer": "bankā"
+      }
+    ],
+    "points": 5,
+    "metadata": {
+      "examPart": 3,
+      "source": "a_2_limenis.pdf",
+      "version": "seed-v1",
+      "officialPart": 3,
+      "officialOrder": 8,
+      "answerKeyVersion": "seed-v1"
+    }
+  },
+  {
+    "id": "writing_message_advert_001",
+    "skill": "writing",
+    "taskType": "message_advert",
+    "topic": "communication",
+    "promptLv": "Uzraksti 35 vārdu ziņu vai sludinājumu, iekļaujot visus 4 punktus.",
+    "promptEn": "Write a 35-word message or advert including all 4 required points.",
+    "questions": [
+      {
+        "id": "q1",
+        "bulletPoints": [
+          "Kas notika?",
+          "Kad un kur?",
+          "Ko tu lūdz vai piedāvā?",
+          "Kā ar tevi sazināties?"
+        ],
+        "minWords": 35
+      }
+    ],
+    "points": 6,
+    "metadata": {
+      "examPart": 3,
+      "source": "a_2_limenis.pdf",
+      "version": "seed-v1",
+      "officialPart": 3,
+      "officialOrder": 9,
+      "answerKeyVersion": "seed-v1"
+    }
+  },
+  {
+    "id": "speaking_interview_001",
+    "skill": "speaking",
+    "taskType": "interview",
+    "topic": "personal_info",
+    "promptLv": "Atbildi uz intervijas jautājumiem.",
+    "promptEn": "Answer the interview questions.",
+    "questions": [
+      {
+        "id": "q1",
+        "promptLv": "Kā jūs sauc?"
+      },
+      {
+        "id": "q2",
+        "promptLv": "Kur jūs dzīvojat?"
+      },
+      {
+        "id": "q3",
+        "promptLv": "Ko jūs darāt brīvajā laikā?"
+      },
+      {
+        "id": "q4",
+        "promptLv": "Kāds ir jūsu darba vai mācību grafiks?"
+      },
+      {
+        "id": "q5",
+        "promptLv": "Ko jūs parasti pērkat tirgū?"
+      },
+      {
+        "id": "q6",
+        "promptLv": "Kā jūs nokļūstat darbā vai skolā?"
+      },
+      {
+        "id": "q7",
+        "promptLv": "Ko jūs darījāt pagājušajā nedēļas nogalē?"
+      },
+      {
+        "id": "q8",
+        "promptLv": "Kādi ir jūsu nākamie plāni?"
+      },
+      {
+        "id": "q9",
+        "promptLv": "Kāds laiks jums patīk visvairāk?"
+      },
+      {
+        "id": "q10",
+        "promptLv": "Kāpēc jūs mācāties latviešu valodu?"
+      }
+    ],
+    "points": 5,
+    "metadata": {
+      "examPart": 4,
+      "source": "a_2_limenis.pdf",
+      "version": "seed-v1",
+      "officialPart": 4,
+      "officialOrder": 10,
+      "answerKeyVersion": "seed-v1"
+    }
+  },
+  {
+    "id": "speaking_image_description_001",
+    "skill": "speaking",
+    "taskType": "image_description",
+    "topic": "daily_life",
+    "promptLv": "Apraksti 2 attēlus: KAS? KO DARA? KUR? un atbildi personisko jautājumu.",
+    "promptEn": "Describe 2 images: WHO? WHAT DOING? WHERE? and answer a personal question.",
+    "questions": [
+      {
+        "id": "q1",
+        "imageHint": "ģimene parkā",
+        "imageUrl": "/images/speaking-q1.svg",
+        "followUp": "Vai jums patīk pavadīt laiku parkā?"
+      },
+      {
+        "id": "q2",
+        "imageHint": "cilvēki kafejnīcā",
+        "imageUrl": "/images/speaking-q2.svg",
+        "followUp": "Ko jūs parasti pasūtāt kafejnīcā?"
+      }
+    ],
+    "points": 5,
+    "metadata": {
+      "examPart": 4,
+      "source": "a_2_limenis.pdf",
+      "version": "seed-v1",
+      "officialPart": 4,
+      "officialOrder": 11,
+      "answerKeyVersion": "seed-v1"
+    }
+  },
+  {
+    "id": "speaking_ad_question_001",
+    "skill": "speaking",
+    "taskType": "ad_question",
+    "topic": "services",
+    "promptLv": "Apskati 3 sludinājumus un uzdod pilnu jautājumu par katru.",
+    "promptEn": "Look at 3 ads and ask a full sentence question about each.",
+    "questions": [
+      {
+        "id": "q1",
+        "adText": "Dzīvoklis īrei centrā",
+        "target": "cena"
+      },
+      {
+        "id": "q2",
+        "adText": "Angļu valodas kursi iesācējiem",
+        "target": "grafiks"
+      },
+      {
+        "id": "q3",
+        "adText": "Velosipēdu noma vasarai",
+        "target": "noteikumi"
+      }
+    ],
+    "points": 5,
+    "metadata": {
+      "examPart": 4,
+      "source": "a_2_limenis.pdf",
+      "version": "seed-v1",
+      "officialPart": 4,
+      "officialOrder": 12,
+      "answerKeyVersion": "seed-v1"
+    }
+  }
+]

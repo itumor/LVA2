@@ -1,0 +1,9 @@
+<svg xmlns='http://www.w3.org/2000/svg' width='960' height='640' viewBox='0 0 960 640'>
+  <rect width='960' height='640' fill='#e8f3ff'/>
+  <circle cx='760' cy='120' r='60' fill='#fff'/>
+  <rect x='0' y='430' width='960' height='210' fill='#f7fbff'/>
+  <polygon points='80,450 220,190 360,450' fill='#8aa7c7'/>
+  <polygon points='260,450 430,150 600,450' fill='#6b90b8'/>
+  <polygon points='520,450 680,220 840,450' fill='#4f759d'/>
+  <text x='480' y='595' text-anchor='middle' font-size='36' font-family='Georgia' fill='#1d2a3b'>Parks ziemā</text>
+</svg>

@@ -1,0 +1,10 @@
+<svg xmlns='http://www.w3.org/2000/svg' width='960' height='640' viewBox='0 0 960 640'>
+  <rect width='960' height='640' fill='#fff3e8'/>
+  <rect x='90' y='120' width='780' height='420' rx='24' fill='#fff'/>
+  <rect x='140' y='200' width='680' height='260' rx='20' fill='#f7ede0'/>
+  <circle cx='300' cy='320' r='58' fill='#2f6c74'/>
+  <circle cx='470' cy='320' r='58' fill='#d24b38'/>
+  <circle cx='640' cy='320' r='58' fill='#f9c784'/>
+  <rect x='250' y='390' width='440' height='18' rx='9' fill='#b9895d'/>
+  <text x='480' y='595' text-anchor='middle' font-size='36' font-family='Georgia' fill='#1d2a3b'>Cilvēki kafejnīcā</text>
+</svg>

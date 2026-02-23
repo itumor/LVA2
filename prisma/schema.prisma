@@ -1,0 +1,222 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Skill {
+  LISTENING
+  READING
+  WRITING
+  SPEAKING
+}
+
+enum TaskType {
+  MCQ
+  TRUE_FALSE
+  FILL_BLANK
+  MATCHING
+  CLOZE
+  PICTURE_SENTENCE
+  WORD_FORM
+  MESSAGE_ADVERT
+  INTERVIEW
+  IMAGE_DESCRIPTION
+  AD_QUESTION
+}
+
+enum SessionMode {
+  EXAM
+  TRAINING
+  DAILY_REVIEW
+}
+
+enum ExamStrictness {
+  OFFICIAL
+  PRACTICE
+}
+
+enum SectionStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  SUBMITTED
+  EXPIRED
+}
+
+enum AttemptSource {
+  EXAM
+  TRAINER
+  REVIEW
+}
+
+enum ReviewStatus {
+  NEW
+  LEARNING
+  REVIEW
+  MASTERED
+}
+
+model LearnerProfile {
+  id                 String              @id @default(cuid())
+  displayName        String
+  preferredLanguage  String              @default("lv")
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  sessions           ExamSession[]
+  attempts           TaskAttempt[]
+  sectionResults     SectionResult[]
+  reviewCards        ReviewCard[]
+  speakingRecordings SpeakingRecording[]
+  dailyPlans         DailyPlanLog[]
+}
+
+model ExamBlueprint {
+  id                String   @id
+  sectionDurations  Json
+  maxPointsPerSkill Int
+  minPassPerSkill   Int
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+model TaskItem {
+  id                 String              @id
+  skill              Skill
+  taskType           TaskType
+  topic              String
+  promptLv           String
+  promptEn           String
+  audioRef           String?
+  transcript         String?
+  questions          Json
+  points             Int
+  metadata           Json
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  attempts           TaskAttempt[]
+  reviewCards        ReviewCard[]
+  speakingRecordings SpeakingRecording[]
+
+  @@index([skill])
+  @@index([taskType])
+  @@index([topic])
+}
+
+model ExamSession {
+  id                 String              @id @default(cuid())
+  learnerId          String
+  learner            LearnerProfile      @relation(fields: [learnerId], references: [id], onDelete: Cascade)
+  mode               SessionMode
+  strictness         ExamStrictness      @default(PRACTICE)
+  startedAt          DateTime            @default(now())
+  endedAt            DateTime?
+  currentSection     Skill?
+  isFinished         Boolean             @default(false)
+  totalScore         Float?
+  passAll            Boolean?
+  failReasons        Json?
+  sectionDeadlines   Json?
+  sectionStates      Json?
+  attempts           TaskAttempt[]
+  sectionResults     SectionResult[]
+  speakingRecordings SpeakingRecording[]
+
+  @@index([learnerId, startedAt])
+}
+
+model TaskAttempt {
+  id          String         @id @default(cuid())
+  learnerId   String
+  learner     LearnerProfile @relation(fields: [learnerId], references: [id], onDelete: Cascade)
+  sessionId   String?
+  session     ExamSession?   @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  taskId      String
+  task        TaskItem       @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  skill       Skill
+  taskType    TaskType
+  answers     Json
+  score       Float
+  maxScore    Float
+  isCorrect   Boolean?
+  confidence  Int?
+  source      AttemptSource
+  submittedAt DateTime       @default(now())
+  feedback    Json?
+  ruleViolations Json?
+
+  @@index([learnerId, submittedAt])
+  @@index([sessionId])
+  @@index([taskId])
+}
+
+model SectionResult {
+  id          String         @id @default(cuid())
+  learnerId   String
+  learner     LearnerProfile @relation(fields: [learnerId], references: [id], onDelete: Cascade)
+  sessionId   String
+  session     ExamSession    @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  skill       Skill
+  score       Float
+  maxScore    Float          @default(15)
+  passed      Boolean
+  status      SectionStatus
+  submittedAt DateTime       @default(now())
+  remediation Json?
+
+  @@unique([sessionId, skill])
+  @@index([learnerId, skill])
+}
+
+model ReviewCard {
+  id            String         @id @default(cuid())
+  learnerId     String
+  learner       LearnerProfile @relation(fields: [learnerId], references: [id], onDelete: Cascade)
+  taskId        String
+  task          TaskItem       @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  easiness      Float          @default(2.5)
+  intervalDays  Int            @default(1)
+  repetitions   Int            @default(0)
+  dueDate       DateTime
+  lastResult    Int?
+  weaknessScore Float          @default(1)
+  status        ReviewStatus   @default(NEW)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  @@unique([learnerId, taskId])
+  @@index([learnerId, dueDate])
+}
+
+model SpeakingRecording {
+  id          String         @id @default(cuid())
+  learnerId   String
+  learner     LearnerProfile @relation(fields: [learnerId], references: [id], onDelete: Cascade)
+  sessionId   String?
+  session     ExamSession?   @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  taskId      String?
+  task        TaskItem?      @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  objectKey   String
+  bucket      String
+  durationSec Float?
+  rubric      Json?
+  createdAt   DateTime       @default(now())
+
+  @@index([learnerId, createdAt])
+}
+
+model DailyPlanLog {
+  id             String         @id @default(cuid())
+  learnerId      String
+  learner        LearnerProfile @relation(fields: [learnerId], references: [id], onDelete: Cascade)
+  planDate       DateTime
+  plannedItems   Json
+  completedCount Int            @default(0)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  @@unique([learnerId, planDate])
+  @@index([learnerId, planDate])
+}

@@ -1,0 +1,10 @@
+<svg xmlns='http://www.w3.org/2000/svg' width='960' height='640' viewBox='0 0 960 640'>
+  <rect width='960' height='640' fill='#e7f8ec'/>
+  <rect x='0' y='440' width='960' height='200' fill='#c4e8b5'/>
+  <circle cx='780' cy='120' r='70' fill='#ffd47e'/>
+  <circle cx='260' cy='350' r='65' fill='#2f6c74'/>
+  <circle cx='420' cy='340' r='55' fill='#d24b38'/>
+  <circle cx='560' cy='355' r='60' fill='#8bb174'/>
+  <rect x='220' y='405' width='390' height='24' rx='12' fill='#6e8f54'/>
+  <text x='480' y='595' text-anchor='middle' font-size='36' font-family='Georgia' fill='#1d2a3b'>Ģimene parkā</text>
+</svg>
