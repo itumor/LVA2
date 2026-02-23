@@ -543,6 +543,32 @@ function readModelText(payload: OpenAIResponse): string {
   return "";
 }
 
+function resolveOpenAIChatCompletionsUrl(): string {
+  const baseUrl = process.env.OPENAI_BASE_URL?.trim();
+  if (!baseUrl) {
+    return "https://api.openai.com/v1/chat/completions";
+  }
+
+  try {
+    const url = new URL(baseUrl);
+    const normalizedPath = url.pathname.replace(/\/+$/, "");
+
+    if (normalizedPath === "" || normalizedPath === "/") {
+      url.pathname = "/v1/chat/completions";
+    } else if (normalizedPath.endsWith("/v1/chat/completions")) {
+      url.pathname = normalizedPath;
+    } else if (normalizedPath.endsWith("/v1")) {
+      url.pathname = `${normalizedPath}/chat/completions`;
+    } else {
+      url.pathname = `${normalizedPath}/v1/chat/completions`;
+    }
+
+    return url.toString();
+  } catch {
+    return "https://api.openai.com/v1/chat/completions";
+  }
+}
+
 function sanitizeStringArray(value: unknown, fallback: string[]): string[] {
   if (!Array.isArray(value)) return fallback;
   const items = value
@@ -635,8 +661,11 @@ async function evaluateWithOpenAI(
   responses: PromptResponse[],
   heuristic: AdaptiveEvaluation,
 ): Promise<AdaptiveEvaluation | null> {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) return null;
+  const apiKey = process.env.OPENAI_API_KEY?.trim();
+  const endpoint = resolveOpenAIChatCompletionsUrl();
+  const usesOpenAIDefaultEndpoint = endpoint.startsWith("https://api.openai.com/");
+
+  if (!apiKey && usesOpenAIDefaultEndpoint) return null;
 
   const model = process.env.OPENAI_EVALUATOR_MODEL ?? "gpt-4o-mini";
   const controller = new AbortController();
@@ -659,12 +688,17 @@ async function evaluateWithOpenAI(
       })),
     };
 
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+
+    if (apiKey) {
+      headers.Authorization = `Bearer ${apiKey}`;
+    }
+
+    const response = await fetch(endpoint, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
+      headers,
       body: JSON.stringify({
         model,
         temperature: 0.2,
@@ -742,9 +776,10 @@ export async function evaluateProductionTask(params: EvaluateProductionParams): 
     return aiEvaluation;
   }
 
-  const warnings = process.env.OPENAI_API_KEY
+  const hasAIConfig = Boolean(process.env.OPENAI_API_KEY?.trim() || process.env.OPENAI_BASE_URL?.trim());
+  const warnings = hasAIConfig
     ? ["AI evaluator unavailable; used local fallback scoring."]
-    : ["OPENAI_API_KEY not configured; used local fallback scoring."];
+    : ["OPENAI_API_KEY / OPENAI_BASE_URL not configured; used local fallback scoring."];
 
   return {
     ...heuristic,

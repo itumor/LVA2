@@ -1,3 +1,4 @@
+import { SpeakingRecorder } from "@/components/SpeakingRecorder";
 import { TrainerWorkspace } from "@/components/TrainerWorkspace";
 import { getTrainerDataBySkill } from "@/lib/queries";
 
@@ -8,10 +9,13 @@ export default async function WritingTrainerPage() {
   const normalized = tasks.map((task) => ({ ...task, questions: task.questions as Array<Record<string, unknown>> }));
 
   return (
-    <TrainerWorkspace
-      title="Writing Trainer"
-      description="Picture sentences, word forms, and 35-word message planning with rubric checkpoints."
-      tasks={normalized}
-    />
+    <div className="grid">
+      <TrainerWorkspace
+        title="Writing Trainer"
+        description="Picture sentences, word forms, and 35-word message planning with rubric checkpoints."
+        tasks={normalized}
+      />
+      <SpeakingRecorder taskId={normalized[0]?.id} />
+    </div>
   );
 }

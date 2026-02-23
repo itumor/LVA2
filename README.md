@@ -53,7 +53,10 @@ npm run dev
 ```
 
 Optional:
-- Set `OPENAI_API_KEY` in `.env` to enable AI-based writing/speaking evaluation. Without it, local heuristic scoring is used.
+- Configure OpenAI-compatible evaluator in `.env`:
+  - `OPENAI_BASE_URL=http://192.168.0.198:1234` (or `http://127.0.0.1:1234`)
+  - `OPENAI_EVALUATOR_MODEL=openai/gpt-oss-20b`
+  - `OPENAI_API_KEY=local-ai` (many local servers accept any non-empty token)
 
 ## Database + Seed
 - Prisma schema: `prisma/schema.prisma`

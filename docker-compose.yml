@@ -61,6 +61,9 @@ services:
       MINIO_ROOT_PASSWORD: minioadmin
       MINIO_BUCKET: vvpp-recordings
       NEXT_PUBLIC_APP_URL: http://localhost:3000
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_EVALUATOR_MODEL: ${OPENAI_EVALUATOR_MODEL:-gpt-4o-mini}
     ports:
       - "3000:3000"
     healthcheck:

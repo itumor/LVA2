@@ -4,10 +4,12 @@ import { evaluateProductionTask } from "@/lib/production-evaluator";
 describe("evaluateProductionTask", () => {
   const previousApiKey = process.env.OPENAI_API_KEY;
   const previousModel = process.env.OPENAI_EVALUATOR_MODEL;
+  const previousBaseUrl = process.env.OPENAI_BASE_URL;
 
   beforeEach(() => {
     delete process.env.OPENAI_API_KEY;
     delete process.env.OPENAI_EVALUATOR_MODEL;
+    delete process.env.OPENAI_BASE_URL;
   });
 
   afterAll(() => {
@@ -21,6 +23,12 @@ describe("evaluateProductionTask", () => {
       process.env.OPENAI_EVALUATOR_MODEL = previousModel;
     } else {
       delete process.env.OPENAI_EVALUATOR_MODEL;
+    }
+
+    if (typeof previousBaseUrl === "string") {
+      process.env.OPENAI_BASE_URL = previousBaseUrl;
+    } else {
+      delete process.env.OPENAI_BASE_URL;
     }
   });
 
