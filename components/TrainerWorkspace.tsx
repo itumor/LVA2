@@ -22,6 +22,33 @@ type SubmitResult = {
   score: number;
   maxScore: number;
   autoGraded: boolean;
+  feedback?: {
+    rawScore?: number;
+    rawMax?: number;
+    adaptiveEvaluation?: {
+      method: "openai" | "heuristic";
+      model?: string;
+      score: number;
+      maxScore: number;
+      rubric: {
+        taskCompletion: number;
+        grammar: number;
+        vocabulary: number;
+        coherence: number;
+        fluency?: number;
+      };
+      strengths: string[];
+      improvements: string[];
+      corrections: Array<{
+        questionId: string;
+        original: string;
+        corrected: string;
+        note: string;
+      }>;
+      overallFeedback: string;
+      warnings?: string[];
+    };
+  };
 };
 
 type SpeechRecognitionLikeResult = {
@@ -166,10 +193,13 @@ export function TrainerWorkspace({
   const [selectedWord, setSelectedWord] = useState<string | null>(null);
   const [draggingWord, setDraggingWord] = useState<string | null>(null);
   const [speechSupported, setSpeechSupported] = useState(false);
+  const [promptAudioSupported, setPromptAudioSupported] = useState(false);
   const [speechTargetQuestionId, setSpeechTargetQuestionId] = useState<string | null>(null);
+  const [speakingQuestionId, setSpeakingQuestionId] = useState<string | null>(null);
   const [speechInterimText, setSpeechInterimText] = useState("");
   const [speechError, setSpeechError] = useState<string | null>(null);
   const speechRecognitionRef = useRef<SpeechRecognitionLike | null>(null);
+  const promptUtteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
 
   const task = tasks[taskIndex];
 
@@ -213,11 +243,18 @@ export function TrainerWorkspace({
     if (typeof window === "undefined") return;
     const speechWindow = window as SpeechWindow;
     setSpeechSupported(Boolean(speechWindow.SpeechRecognition || speechWindow.webkitSpeechRecognition));
+    setPromptAudioSupported(
+      Boolean(window.speechSynthesis && typeof window.SpeechSynthesisUtterance === "function"),
+    );
   }, []);
 
   useEffect(() => {
     return () => {
       speechRecognitionRef.current?.stop();
+      if (typeof window !== "undefined") {
+        window.speechSynthesis?.cancel();
+      }
+      promptUtteranceRef.current = null;
     };
   }, []);
 
@@ -276,6 +313,45 @@ export function TrainerWorkspace({
     setSpeechInterimText("");
   }
 
+  function stopPromptAudio(resetState = true) {
+    if (typeof window !== "undefined") {
+      window.speechSynthesis?.cancel();
+    }
+    promptUtteranceRef.current = null;
+    if (resetState) {
+      setSpeakingQuestionId(null);
+    }
+  }
+
+  function playPromptAudio(questionId: string, promptText: string) {
+    const cleanPrompt = promptText.trim();
+    if (!cleanPrompt || typeof window === "undefined") return;
+    if (!window.speechSynthesis || typeof window.SpeechSynthesisUtterance !== "function") return;
+
+    stopSpeechRecognition();
+    stopPromptAudio();
+
+    const utterance = new window.SpeechSynthesisUtterance(cleanPrompt);
+    utterance.lang = "lv-LV";
+    utterance.rate = 0.95;
+    utterance.onend = () => {
+      if (promptUtteranceRef.current === utterance) {
+        promptUtteranceRef.current = null;
+      }
+      setSpeakingQuestionId((current) => (current === questionId ? null : current));
+    };
+    utterance.onerror = () => {
+      if (promptUtteranceRef.current === utterance) {
+        promptUtteranceRef.current = null;
+      }
+      setSpeakingQuestionId((current) => (current === questionId ? null : current));
+    };
+
+    promptUtteranceRef.current = utterance;
+    setSpeakingQuestionId(questionId);
+    window.speechSynthesis.speak(utterance);
+  }
+
   function startSpeechRecognition(questionId: string) {
     if (typeof window === "undefined") return;
     const speechWindow = window as SpeechWindow;
@@ -286,6 +362,7 @@ export function TrainerWorkspace({
       return;
     }
 
+    stopPromptAudio();
     stopSpeechRecognition();
     setSpeechError(null);
     setSpeechInterimText("");
@@ -362,6 +439,24 @@ export function TrainerWorkspace({
         </p>
         {listening && speechInterimText ? <p className="speechInterim">{speechInterimText}</p> : null}
       </div>
+    );
+  }
+
+  function renderPromptAudioControl(questionId: string, promptText: string) {
+    if (!isSpeechTask) return null;
+    if (!promptText.trim()) return null;
+
+    const speaking = speakingQuestionId === questionId;
+
+    return (
+      <button
+        type="button"
+        className={`${speaking ? "primaryBtn" : "secondaryBtn"} promptAudioBtn`}
+        onClick={() => (speaking ? stopPromptAudio() : playPromptAudio(questionId, promptText))}
+        disabled={!promptAudioSupported}
+      >
+        {speaking ? "Stop question audio" : "Play question"}
+      </button>
     );
   }
 
@@ -799,9 +894,12 @@ export function TrainerWorkspace({
             const prompt = String(question.promptLv ?? question.stemLv ?? `Jautājums ${idx + 1}`);
             return (
               <li key={questionId} className="questionItem">
-                <p className="questionStem">
-                  {idx + 1}. {prompt}
-                </p>
+                <div className="questionStemRow">
+                  <p className="questionStem">
+                    {idx + 1}. {prompt}
+                  </p>
+                  {renderPromptAudioControl(questionId, prompt)}
+                </div>
                 <textarea
                   className="linedAnswer"
                   value={String(answerFor(questionId) ?? "")}
@@ -824,11 +922,16 @@ export function TrainerWorkspace({
             const imageSrc = imageFromQuestion(question, questionId);
             const imageHint = typeof question.imageHint === "string" ? question.imageHint : null;
             const followUp = typeof question.followUp === "string" ? question.followUp : null;
+            const prompt = "Aplūko attēlu un atbildi: KAS? KO DARA? KUR?";
+            const promptAudioText = followUp ? `${prompt} ${followUp}` : prompt;
             return (
               <article key={questionId} className="taskImageRow">
-                <p className="questionStem">
-                  {idx + 1}. Aplūko attēlu un atbildi: KAS? KO DARA? KUR?
-                </p>
+                <div className="questionStemRow">
+                  <p className="questionStem">
+                    {idx + 1}. {prompt}
+                  </p>
+                  {renderPromptAudioControl(questionId, promptAudioText)}
+                </div>
                 {imageSrc ? (
                   <figure className="taskImageWrap">
                     <img src={imageSrc} alt={imageHint ?? `Attēls ${questionId}`} className="taskImage" />
@@ -862,6 +965,9 @@ export function TrainerWorkspace({
                 <div className="adPrompt">
                   <strong>{idx + 1}. {adText}</strong>
                   <p style={{ margin: "0.3rem 0 0" }}>Uzdod jautājumu par: {target}</p>
+                  <div style={{ marginTop: "0.45rem" }}>
+                    {renderPromptAudioControl(questionId, `${adText}. Uzdod jautājumu par: ${target}`)}
+                  </div>
                 </div>
                 <input
                   style={{ marginTop: "0.4rem" }}
@@ -914,6 +1020,7 @@ export function TrainerWorkspace({
             onChange={(event) => {
               const nextIndex = tasks.findIndex((candidate) => candidate.id === event.target.value);
               stopSpeechRecognition();
+              stopPromptAudio();
               setSpeechError(null);
               setTaskIndex(nextIndex >= 0 ? nextIndex : 0);
               setAnswers({});
@@ -975,7 +1082,10 @@ export function TrainerWorkspace({
           task.taskType === "IMAGE_DESCRIPTION" ||
           task.taskType === "AD_QUESTION") && (
           <div className="panel" style={{ marginTop: "1rem", padding: "0.8rem", boxShadow: "none" }}>
-            <h4 style={{ marginTop: 0 }}>Guided rubric input</h4>
+            <h4 style={{ marginTop: 0 }}>Optional rubric hints</h4>
+            <p style={{ marginTop: "0.25rem", color: "var(--ink-soft)" }}>
+              Leave these empty to use adaptive scoring and corrections automatically.
+            </p>
             <div className="grid two">
               {(task.taskType === "MESSAGE_ADVERT" ||
                 task.taskType === "INTERVIEW" ||
@@ -1059,7 +1169,92 @@ export function TrainerWorkspace({
             <p>
               Score: <strong>{result.score}</strong> / {result.maxScore}
             </p>
-            <p>{result.autoGraded ? "Auto-graded" : "Rubric-guided score recorded"}</p>
+            {result.feedback?.adaptiveEvaluation ? (
+              <p>
+                {result.feedback.adaptiveEvaluation.method === "openai"
+                  ? "AI-evaluated with dynamic corrections."
+                  : "Adaptive fallback evaluation with smart local scoring."}
+              </p>
+            ) : (
+              <p>{result.autoGraded ? "Auto-graded" : "Rubric-guided score recorded"}</p>
+            )}
+
+            {result.feedback?.adaptiveEvaluation ? (
+              <div>
+                <p style={{ marginBottom: "0.45rem" }}>
+                  <strong>Feedback:</strong> {result.feedback.adaptiveEvaluation.overallFeedback}
+                </p>
+                <p style={{ marginBottom: "0.45rem" }}>
+                  Rubric: task completion {result.feedback.adaptiveEvaluation.rubric.taskCompletion}/5, grammar{" "}
+                  {result.feedback.adaptiveEvaluation.rubric.grammar}/5, vocabulary{" "}
+                  {result.feedback.adaptiveEvaluation.rubric.vocabulary}/5, coherence{" "}
+                  {result.feedback.adaptiveEvaluation.rubric.coherence}/5
+                  {typeof result.feedback.adaptiveEvaluation.rubric.fluency === "number"
+                    ? `, fluency ${result.feedback.adaptiveEvaluation.rubric.fluency}/5`
+                    : ""}
+                </p>
+
+                {result.feedback.adaptiveEvaluation.strengths.length > 0 ? (
+                  <>
+                    <p style={{ marginBottom: "0.3rem" }}>
+                      <strong>Strengths</strong>
+                    </p>
+                    <ul style={{ marginTop: 0 }}>
+                      {result.feedback.adaptiveEvaluation.strengths.map((item) => (
+                        <li key={item}>{item}</li>
+                      ))}
+                    </ul>
+                  </>
+                ) : null}
+
+                {result.feedback.adaptiveEvaluation.improvements.length > 0 ? (
+                  <>
+                    <p style={{ marginBottom: "0.3rem" }}>
+                      <strong>Improvements</strong>
+                    </p>
+                    <ul style={{ marginTop: 0 }}>
+                      {result.feedback.adaptiveEvaluation.improvements.map((item) => (
+                        <li key={item}>{item}</li>
+                      ))}
+                    </ul>
+                  </>
+                ) : null}
+
+                {result.feedback.adaptiveEvaluation.corrections.length > 0 ? (
+                  <details>
+                    <summary>Corrections</summary>
+                    <div style={{ marginTop: "0.5rem", display: "grid", gap: "0.45rem" }}>
+                      {result.feedback.adaptiveEvaluation.corrections.map((item) => (
+                        <article
+                          key={`${item.questionId}-${item.original}`}
+                          style={{
+                            border: "1px solid color-mix(in oklab, var(--line) 88%, transparent)",
+                            borderRadius: "10px",
+                            padding: "0.55rem",
+                          }}
+                        >
+                          <p style={{ margin: 0, fontWeight: 600 }}>{item.questionId}</p>
+                          <p style={{ margin: "0.2rem 0" }}>
+                            <strong>Original:</strong> {item.original}
+                          </p>
+                          <p style={{ margin: "0.2rem 0" }}>
+                            <strong>Suggested:</strong> {item.corrected}
+                          </p>
+                          <p style={{ margin: 0, color: "var(--ink-soft)" }}>{item.note}</p>
+                        </article>
+                      ))}
+                    </div>
+                  </details>
+                ) : null}
+
+                {result.feedback.adaptiveEvaluation.warnings?.length ? (
+                  <p style={{ marginTop: "0.55rem", color: "var(--ink-soft)" }}>
+                    {result.feedback.adaptiveEvaluation.warnings.join(" ")}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
+
             {task.transcript ? (
               <details>
                 <summary>Transcript</summary>

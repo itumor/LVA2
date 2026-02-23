@@ -32,8 +32,8 @@ docker compose down
 - `/exam`: full exam simulator with mode selector (Listening -> Reading -> Writing -> Speaking)
 - `/trainer/listening`: announcements, true/false dialogue, fill blanks
 - `/trainer/reading`: matching + cloze
-- `/trainer/writing`: rubric-guided writing scoring
-- `/trainer/speaking`: speaking prompts + audio recorder/upload
+- `/trainer/writing`: adaptive writing scoring + corrections
+- `/trainer/speaking`: adaptive speaking scoring + corrections + audio recorder/upload
 - `/review`: spaced repetition queue from mistakes
 - `/analytics`: scores by skill/type + recent attempts
 - `/settings`: LV/EN language toggle and replay preference UI

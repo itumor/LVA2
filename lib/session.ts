@@ -13,6 +13,7 @@ import {
   SECTION_DURATIONS_MINUTES,
 } from "@/lib/constants";
 import { upsertReviewCardFromAttempt } from "@/lib/daily-plan";
+import { evaluateProductionTask } from "@/lib/production-evaluator";
 import { prisma } from "@/lib/prisma";
 import { buildFailReasonsDetailed, buildSectionRemediation } from "@/lib/remediation";
 import { computeExamOutcome, evaluateSectionPass, scoreAutoGradedTask, scoreRubricTask } from "@/lib/scoring";
@@ -288,10 +289,28 @@ export async function submitAnswer(params: {
 
   const parsedQuestions = task.questions as unknown as Array<Record<string, unknown>>;
   const source = params.source ?? AttemptSource.TRAINER;
+  const adaptiveEvaluation = await evaluateProductionTask({
+    task: {
+      id: task.id,
+      skill: task.skill,
+      taskType: task.taskType,
+      points: task.points,
+      promptLv: task.promptLv,
+      promptEn: task.promptEn,
+      questions: parsedQuestions,
+    },
+    answers: params.answers,
+  });
 
-  const baseScore = AUTO_GRADED_TYPES.includes(task.taskType)
-    ? scoreAutoGradedTask(task.taskType, parsedQuestions, params.answers)
-    : scoreRubricTask({ taskType: task.taskType, points: task.points, answers: params.answers });
+  const baseScore = adaptiveEvaluation
+    ? {
+        score: adaptiveEvaluation.score,
+        maxScore: adaptiveEvaluation.maxScore,
+        isAutoGraded: false,
+      }
+    : AUTO_GRADED_TYPES.includes(task.taskType)
+      ? scoreAutoGradedTask(task.taskType, parsedQuestions, params.answers)
+      : scoreRubricTask({ taskType: task.taskType, points: task.points, answers: params.answers });
 
   const scaledScore =
     baseScore.maxScore > 0
@@ -330,6 +349,7 @@ export async function submitAnswer(params: {
         autoGraded: baseScore.isAutoGraded,
         rawScore: baseScore.score,
         rawMax: baseScore.maxScore,
+        adaptiveEvaluation: adaptiveEvaluation ?? undefined,
         evidenceFeedback:
           session.strictness === ExamStrictness.PRACTICE && evidenceFeedback
             ? {
@@ -354,6 +374,11 @@ export async function submitAnswer(params: {
     score: scaledScore,
     maxScore: task.points,
     autoGraded: baseScore.isAutoGraded,
+    feedback: {
+      rawScore: baseScore.score,
+      rawMax: baseScore.maxScore,
+      adaptiveEvaluation: adaptiveEvaluation ?? undefined,
+    },
     strictness: session.strictness,
     transcriptAllowed:
       task.skill !== Skill.LISTENING

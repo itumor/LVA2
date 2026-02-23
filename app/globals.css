@@ -412,6 +412,29 @@ textarea {
   font-weight: 700;
 }
 
+.questionStemRow {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.55rem;
+}
+
+.questionStemRow .questionStem {
+  flex: 1;
+}
+
+.promptAudioBtn {
+  min-width: 9.4rem;
+  padding: 0.34rem 0.62rem;
+  font-size: 0.82rem;
+  white-space: nowrap;
+}
+
+.promptAudioBtn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .optionList {
   margin: 0.42rem 0 0;
   display: grid;
@@ -679,5 +702,10 @@ textarea {
 
   .paperFooter {
     font-size: 0.72rem;
+  }
+
+  .questionStemRow {
+    flex-direction: column;
+    align-items: flex-start;
   }
 }

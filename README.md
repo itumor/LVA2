@@ -18,7 +18,7 @@ Local-first web app for Latvian VVPP A2 exam simulation and adaptive practice.
 - Full exam-mode flow with official skill order and per-skill threshold (`>=9/15`)
 - Trainers for Listening, Reading, Writing, Speaking
 - Auto-scoring for listening/reading task types
-- Guided rubric scoring for writing/speaking task types
+- Adaptive scoring and corrections for writing/speaking (OpenAI + local fallback)
 - Adaptive daily-plan API using spaced intervals (1/3/7/14 days)
 - Speaking audio recording upload to MinIO
 - Analytics and review queue pages
@@ -51,6 +51,9 @@ npm run db:migrate
 npm run db:seed
 npm run dev
 ```
+
+Optional:
+- Set `OPENAI_API_KEY` in `.env` to enable AI-based writing/speaking evaluation. Without it, local heuristic scoring is used.
 
 ## Database + Seed
 - Prisma schema: `prisma/schema.prisma`
