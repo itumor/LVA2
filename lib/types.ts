@@ -57,7 +57,9 @@ export type ExamStrictness = "OFFICIAL" | "PRACTICE";
 export type RuleViolationCode =
   | "SECTION_LOCKED"
   | "INVALID_SECTION_TASK"
-  | "REPLAY_LIMIT_EXCEEDED";
+  | "REPLAY_LIMIT_EXCEEDED"
+  | "INVALID_SESSION_MODE"
+  | "SESSION_INCOMPLETE";
 
 export type RemediationItem = {
   skill: Skill;

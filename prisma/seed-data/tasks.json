@@ -451,25 +451,25 @@
       {
         "id": "q1",
         "imageHint": "ģimene virtuvē",
-        "imageUrl": "/images/writing-q1.svg",
+        "imageUrl": "/images/writing-q1.jpg",
         "minWords": 5
       },
       {
         "id": "q2",
         "imageHint": "cilvēks autobusā",
-        "imageUrl": "/images/writing-q2.svg",
+        "imageUrl": "/images/writing-q2.jpg",
         "minWords": 5
       },
       {
         "id": "q3",
         "imageHint": "tirgus laukums",
-        "imageUrl": "/images/writing-q3.svg",
+        "imageUrl": "/images/writing-q3.jpg",
         "minWords": 5
       },
       {
         "id": "q4",
         "imageHint": "parks ziemā",
-        "imageUrl": "/images/writing-q4.svg",
+        "imageUrl": "/images/writing-q4.jpg",
         "minWords": 5
       }
     ],
@@ -626,13 +626,13 @@
       {
         "id": "q1",
         "imageHint": "ģimene parkā",
-        "imageUrl": "/images/speaking-q1.svg",
+        "imageUrl": "/images/speaking-q1.jpg",
         "followUp": "Vai jums patīk pavadīt laiku parkā?"
       },
       {
         "id": "q2",
         "imageHint": "cilvēki kafejnīcā",
-        "imageUrl": "/images/speaking-q2.svg",
+        "imageUrl": "/images/speaking-q2.jpg",
         "followUp": "Ko jūs parasti pasūtāt kafejnīcā?"
       }
     ],

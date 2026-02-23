@@ -494,8 +494,10 @@ export async function recordListeningPlay(params: {
     (session.currentSection !== Skill.LISTENING || expired || sectionState.status !== SectionStatus.IN_PROGRESS);
 
   const currentPlays = runtime.listeningPlays[params.taskId] ?? 0;
+  const isOfficial = session.strictness === ExamStrictness.OFFICIAL;
+  const limitReached = isOfficial && currentPlays >= LISTENING_REPLAY_LIMIT;
 
-  if (sectionLocked) {
+  if (sectionLocked || limitReached) {
     return {
       playsUsed: currentPlays,
       playsRemaining: Math.max(0, LISTENING_REPLAY_LIMIT - currentPlays),
@@ -515,15 +517,11 @@ export async function recordListeningPlay(params: {
     },
   });
 
-  const locked =
-    session.strictness === ExamStrictness.OFFICIAL && nextPlays > LISTENING_REPLAY_LIMIT;
+  const locked = isOfficial && nextPlays >= LISTENING_REPLAY_LIMIT;
 
   return {
     playsUsed: nextPlays,
-    playsRemaining:
-      session.strictness === ExamStrictness.OFFICIAL
-        ? Math.max(0, LISTENING_REPLAY_LIMIT - nextPlays)
-        : -1,
+    playsRemaining: isOfficial ? Math.max(0, LISTENING_REPLAY_LIMIT - nextPlays) : -1,
     locked,
     strictness: session.strictness,
     playEventAt: params.playEventAt ?? new Date().toISOString(),
@@ -531,7 +529,27 @@ export async function recordListeningPlay(params: {
 }
 
 export async function finishSession(sessionId: string) {
+  const sessionBeforeFinish = await loadSessionOrThrow(sessionId);
+  if (sessionBeforeFinish.mode !== SessionMode.EXAM) {
+    throw new SessionRuleError(
+      "INVALID_SESSION_MODE",
+      `Session ${sessionId} is ${sessionBeforeFinish.mode}; only EXAM sessions can be finished`,
+      400,
+    );
+  }
+
   const sectionResults = await prisma.sectionResult.findMany({ where: { sessionId } });
+  const submittedSkills = new Set(sectionResults.map((row) => row.skill));
+  const missingSkills = EXAM_SECTION_ORDER.filter((skill) => !submittedSkills.has(skill));
+
+  if (missingSkills.length > 0) {
+    throw new SessionRuleError(
+      "SESSION_INCOMPLETE",
+      `Cannot finish exam before all sections are submitted. Missing: ${missingSkills.join(", ")}`,
+      409,
+    );
+  }
+
   const mapped = sectionResults.map((row) => ({
     skill: row.skill,
     score: row.score,

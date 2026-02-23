@@ -92,12 +92,13 @@ export async function gradeReviewCard(params: {
 }
 
 export async function buildDailyPlan(learnerId: string) {
-  const today = startOfDay(new Date());
+  const now = new Date();
+  const planDate = startOfDay(now);
 
   const dueCards = await prisma.reviewCard.findMany({
     where: {
       learnerId,
-      dueDate: { lte: today },
+      dueDate: { lte: now },
     },
     include: { task: true },
     orderBy: [{ weaknessScore: "desc" }, { dueDate: "asc" }],
@@ -186,7 +187,7 @@ export async function buildDailyPlan(learnerId: string) {
     where: {
       learnerId_planDate: {
         learnerId,
-        planDate: today,
+        planDate,
       },
     },
     update: {
@@ -194,7 +195,7 @@ export async function buildDailyPlan(learnerId: string) {
     },
     create: {
       learnerId,
-      planDate: today,
+      planDate,
       plannedItems: capped as unknown as object,
     },
   });

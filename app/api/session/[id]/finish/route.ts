@@ -1,5 +1,5 @@
 import { fail, ok } from "@/lib/http";
-import { finishSession } from "@/lib/session";
+import { finishSession, SessionRuleError } from "@/lib/session";
 
 export async function POST(
   _request: Request,
@@ -10,6 +10,9 @@ export async function POST(
     const result = await finishSession(id);
     return ok(result);
   } catch (error) {
+    if (error instanceof SessionRuleError) {
+      return fail(error.code, error.status, error.code);
+    }
     return fail(error instanceof Error ? error.message : "Failed to finish session");
   }
 }

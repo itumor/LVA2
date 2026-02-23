@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 const sectionOrder = ["LISTENING", "READING", "WRITING", "SPEAKING"] as const;
@@ -10,6 +10,50 @@ const sectionMinutes: Record<(typeof sectionOrder)[number], number> = {
   READING: 30,
   WRITING: 35,
   SPEAKING: 15,
+};
+
+const sectionTitlesLv: Record<(typeof sectionOrder)[number], string> = {
+  LISTENING: "Klausīšanās prasmes pārbaudes uzdevumi",
+  READING: "Lasītprasmes pārbaudes uzdevumi",
+  WRITING: "Rakstītprasmes pārbaudes uzdevumi",
+  SPEAKING: "Runātprasmes pārbaudes uzdevumi",
+};
+
+const sectionRulesLv: Record<(typeof sectionOrder)[number], string[]> = {
+  LISTENING: [
+    "Klausieties ierakstu uzmanīgi. Katrs paziņojums skanēs divas reizes.",
+    "Pēc katra paziņojuma atzīmējiet pareizo atbildi.",
+    "Strādājiet secīgi un neatstājiet jautājumus tukšus.",
+  ],
+  READING: [
+    "Lasiet tekstus un sludinājumus uzmanīgi.",
+    "Atzīmējiet tikai vienu atbilstošu variantu.",
+    "Ja vajadzīgs, norādiet arī pierādījuma avotu.",
+  ],
+  WRITING: [
+    "Aplūkojiet attēlus vai uzdevuma situāciju.",
+    "Rakstiet skaidrus un gramatiski pareizus teikumus.",
+    "Ziņojuma uzdevumā ievērojiet minimālo vārdu skaitu.",
+  ],
+  SPEAKING: [
+    "Atbildiet pilnos, saprotamos teikumos.",
+    "Aprakstiet attēlos redzamo un pamatot savas atbildes.",
+    "Jautājumu uzdevumā precīzi noformulējiet jautājumus.",
+  ],
+};
+
+const taskTypeTitlesLv: Record<string, string> = {
+  MCQ: "Izvēlies pareizo atbildi",
+  TRUE_FALSE: "Atzīmē apgalvojumus (Jā/Nē)",
+  FILL_BLANK: "Ieraksti trūkstošo vārdu vai skaitli",
+  MATCHING: "Savieno informāciju",
+  CLOZE: "Izvēlies atbilstošo vārdu",
+  PICTURE_SENTENCE: "Uzraksti teikumu par attēlu",
+  WORD_FORM: "Ieraksti vārdu pareizā formā",
+  MESSAGE_ADVERT: "Uzraksti ziņu pēc sludinājuma",
+  INTERVIEW: "Atbildi uz jautājumiem",
+  IMAGE_DESCRIPTION: "Apraksti attēlu",
+  AD_QUESTION: "Uzdod jautājumu par sludinājumu",
 };
 
 type ExamStrictness = "OFFICIAL" | "PRACTICE";
@@ -74,6 +118,31 @@ function toSeconds(deadlineIso: string | null, fallbackMinutes: number) {
   return Math.max(0, Math.floor(diff / 1000));
 }
 
+function renderStemWithBlank(stem: string, input: ReactNode) {
+  const parts = stem.split("____");
+  if (parts.length === 1) {
+    return (
+      <span className="inlineBlankWrap">
+        {stem}
+        {input}
+      </span>
+    );
+  }
+
+  return (
+    <span className="inlineBlankWrap">
+      <span>{parts[0]}</span>
+      {input}
+      <span>{parts.slice(1).join("____")}</span>
+    </span>
+  );
+}
+
+function pageStamp(section: (typeof sectionOrder)[number], taskIndex: number) {
+  const sectionOffset = sectionOrder.indexOf(section) * 3;
+  return sectionOffset + taskIndex + 10;
+}
+
 export function ExamRunner({ tasksBySkill }: { tasksBySkill: GroupedTasks }) {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -84,7 +153,7 @@ export function ExamRunner({ tasksBySkill }: { tasksBySkill: GroupedTasks }) {
   const [activeSectionIndex, setActiveSectionIndex] = useState(0);
   const [remainingSec, setRemainingSec] = useState(sectionMinutes.LISTENING * 60);
   const [answers, setAnswers] = useState<Record<string, string>>({});
-  const [status, setStatus] = useState("Select a simulation mode to begin.");
+  const [status, setStatus] = useState("Izvēlieties režīmu un sāciet pārbaudījumu.");
   const [busy, setBusy] = useState(false);
   const [playState, setPlayState] = useState<Record<string, ListeningPlayState>>({});
   const [submittedTaskIds, setSubmittedTaskIds] = useState<Record<string, boolean>>({});
@@ -177,6 +246,10 @@ export function ExamRunner({ tasksBySkill }: { tasksBySkill: GroupedTasks }) {
     setAnswers((prev) => ({ ...prev, [`${taskId}::${questionId}`]: value }));
   }
 
+  function answerFor(taskId: string, questionId: string) {
+    return answers[`${taskId}::${questionId}`] ?? "";
+  }
+
   function audioForTask(task: ExamTask) {
     if (!task.audioRef) return null;
     if (task.audioRef.includes("a_2_limenis_audio.mp3")) return "/media/a_2_limenis_audio.mp3";
@@ -212,11 +285,11 @@ export function ExamRunner({ tasksBySkill }: { tasksBySkill: GroupedTasks }) {
       setSessionId(data.id);
       setStrictness(data.strictness);
       setSectionDeadlines(data.sectionDeadlines ?? {});
-      setStatus(`${data.strictness} mode started. Follow section rules.`);
+      setStatus(`${data.strictness} režīms sākts. Sekojiet uzdevuma nosacījumiem.`);
       router.replace(`/exam?sessionId=${data.id}`);
       return data.id;
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Could not start exam");
+      setStatus(error instanceof Error ? error.message : "Neizdevās sākt sesiju");
       return null;
     } finally {
       if (toggledBusy) {
@@ -272,9 +345,9 @@ export function ExamRunner({ tasksBySkill }: { tasksBySkill: GroupedTasks }) {
       if (data.locked) {
         element.pause();
         element.currentTime = 0;
-        setStatus("Listening replay limit reached for this task.");
+        setStatus("Klausīšanās atkārtojumu limits šim uzdevumam ir sasniegts.");
       } else if (strictness === "PRACTICE" && data.playsUsed > 2) {
-        setStatus("Practice mode warning: replay count is above official 2-play limit.");
+        setStatus("Prakses režīms: atkārtojumu skaits pārsniedz oficiālo 2 reižu limitu.");
       }
     } catch (error) {
       element.pause();
@@ -291,17 +364,17 @@ export function ExamRunner({ tasksBySkill }: { tasksBySkill: GroupedTasks }) {
       const submitted: Record<string, boolean> = { ...submittedTaskIds };
 
       for (const task of sectionTasks) {
-        const payload: Record<string, string> = {};
+        const payload: Record<string, string | number | boolean> = {};
         for (const question of task.questions) {
           const questionId = String(question.id);
-          payload[questionId] = answers[`${task.id}::${questionId}`] ?? "";
+          payload[questionId] = answerFor(task.id, questionId);
 
           if (Array.isArray(question.statements)) {
             const statements = question.statements as Array<Record<string, unknown>>;
             for (const statement of statements) {
               const rowId = String(statement.id);
-              payload[rowId] = answers[`${task.id}::${rowId}`] ?? "";
-              payload[`evidence::${rowId}`] = answers[`${task.id}::evidence::${rowId}`] ?? "";
+              payload[rowId] = answerFor(task.id, rowId);
+              payload[`evidence::${rowId}`] = answerFor(task.id, `evidence::${rowId}`);
             }
           }
 
@@ -309,10 +382,26 @@ export function ExamRunner({ tasksBySkill }: { tasksBySkill: GroupedTasks }) {
             const situations = question.situations as Array<Record<string, unknown>>;
             for (const situation of situations) {
               const rowId = String(situation.id);
-              payload[rowId] = answers[`${task.id}::${rowId}`] ?? "";
-              payload[`evidence::${rowId}`] = answers[`${task.id}::evidence::${rowId}`] ?? "";
+              payload[rowId] = answerFor(task.id, rowId);
+              payload[`evidence::${rowId}`] = answerFor(task.id, `evidence::${rowId}`);
             }
           }
+        }
+
+        if (["INTERVIEW", "IMAGE_DESCRIPTION", "AD_QUESTION", "MESSAGE_ADVERT"].includes(task.taskType)) {
+          payload.rubricChecks = Number(answerFor(task.id, "rubricChecks") || 0);
+        }
+
+        if (task.taskType === "MESSAGE_ADVERT") {
+          payload.wordCount = Number(answerFor(task.id, "wordCount") || 0);
+        }
+
+        if (task.taskType === "PICTURE_SENTENCE") {
+          payload.sentenceChecks = Number(answerFor(task.id, "sentenceChecks") || 0);
+        }
+
+        if (task.taskType === "WORD_FORM") {
+          payload.correctForms = Number(answerFor(task.id, "correctForms") || 0);
         }
 
         const answerResponse = await fetch(`/api/session/${sid}/answer`, {
@@ -341,7 +430,7 @@ export function ExamRunner({ tasksBySkill }: { tasksBySkill: GroupedTasks }) {
       }
 
       setSectionSummary(sectionPayload.data as SectionSummary);
-      setStatus(`${activeSkill} completed. Review remediation and continue.`);
+      setStatus(`${activeSkill} pabeigts. Apskati rezultātu un turpini.`);
 
       if (activeSectionIndex + 1 >= sectionOrder.length) {
         const finishRes = await fetch(`/api/session/${sid}/finish`, { method: "POST" });
@@ -354,7 +443,7 @@ export function ExamRunner({ tasksBySkill }: { tasksBySkill: GroupedTasks }) {
 
         const data = resultPayload.data as FinalResult;
         setFinalResult(data);
-        setStatus(`Exam finished: ${data.passAll ? "PASSED" : "NOT PASSED"}`);
+        setStatus(`Pārbaudījums pabeigts: ${data.passAll ? "NOKĀRTOTS" : "NENOKĀRTOTS"}`);
       }
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Submission failed");
@@ -365,7 +454,7 @@ export function ExamRunner({ tasksBySkill }: { tasksBySkill: GroupedTasks }) {
 
   async function autoSubmitSection() {
     if (busy || sectionSummary || finalResult) return;
-    setStatus(`Time is up for ${activeSkill}. Auto-submitting...`);
+    setStatus(`Laiks ${activeSkill} daļai beidzies. Notiek automātiska iesniegšana...`);
     await submitCurrentSection();
   }
 
@@ -385,17 +474,544 @@ export function ExamRunner({ tasksBySkill }: { tasksBySkill: GroupedTasks }) {
     return Boolean(submittedTaskIds[taskId]);
   }
 
+  function renderTaskBody(task: ExamTask) {
+    if (task.taskType === "MCQ") {
+      return (
+        <ol className="questionGroup">
+          {task.questions.map((question, idx) => {
+            const qid = String(question.id ?? `q${idx + 1}`);
+            const stem = String(question.stemLv ?? `Jautājums ${idx + 1}`);
+            const options = Array.isArray(question.options)
+              ? question.options.map((option) => String(option))
+              : [];
+
+            return (
+              <li key={qid} className="questionItem">
+                <p className="questionStem">
+                  {idx + 1}. {stem}
+                </p>
+                <div className="optionList">
+                  {options.map((option) => (
+                    <label key={option} className="optionRow" htmlFor={`${task.id}-${qid}-${option}`}>
+                      <input
+                        id={`${task.id}-${qid}-${option}`}
+                        type="radio"
+                        name={`${task.id}-${qid}`}
+                        checked={answerFor(task.id, qid) === option}
+                        onChange={() => setAnswer(task.id, qid, option)}
+                      />
+                      <span>{option}</span>
+                    </label>
+                  ))}
+                </div>
+              </li>
+            );
+          })}
+        </ol>
+      );
+    }
+
+    if (task.taskType === "TRUE_FALSE") {
+      return (
+        <table className="trueFalseTable">
+          <thead>
+            <tr>
+              <th>Apgalvojums</th>
+              <th className="answerCell">Jā</th>
+              <th className="answerCell">Nē</th>
+            </tr>
+          </thead>
+          <tbody>
+            {task.questions.map((question, idx) => {
+              const qid = String(question.id ?? `q${idx + 1}`);
+              const stem = String(question.stemLv ?? `Apgalvojums ${idx + 1}`);
+              const selected = answerFor(task.id, qid);
+
+              return (
+                <tr key={qid}>
+                  <td>
+                    {idx + 1}. {stem}
+                  </td>
+                  <td className="answerCell">
+                    <input
+                      type="radio"
+                      name={`${task.id}-${qid}`}
+                      checked={selected === "true"}
+                      onChange={() => setAnswer(task.id, qid, "true")}
+                    />
+                  </td>
+                  <td className="answerCell">
+                    <input
+                      type="radio"
+                      name={`${task.id}-${qid}`}
+                      checked={selected === "false"}
+                      onChange={() => setAnswer(task.id, qid, "false")}
+                    />
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      );
+    }
+
+    if (task.taskType === "FILL_BLANK") {
+      return (
+        <ol className="blankList">
+          {task.questions.map((question, idx) => {
+            const qid = String(question.id ?? `q${idx + 1}`);
+            const stem = String(question.stemLv ?? "");
+
+            return (
+              <li key={qid} className="matchRow">
+                {renderStemWithBlank(
+                  `${idx + 1}. ${stem}`,
+                  <input
+                    id={`${task.id}-${qid}`}
+                    className="blankInput"
+                    value={answerFor(task.id, qid)}
+                    onChange={(event) => setAnswer(task.id, qid, event.target.value)}
+                    placeholder="..."
+                  />,
+                )}
+              </li>
+            );
+          })}
+        </ol>
+      );
+    }
+
+    if (task.taskType === "MATCHING") {
+      return (
+        <div className="questionGroup">
+          {task.questions.map((question, questionIndex) => {
+            const qid = String(question.id ?? `q${questionIndex + 1}`);
+            const texts = Array.isArray(question.texts)
+              ? (question.texts as Array<Record<string, unknown>>)
+              : [];
+            const ads = Array.isArray(question.ads)
+              ? (question.ads as Array<Record<string, unknown>>)
+              : [];
+            const statements = Array.isArray(question.statements)
+              ? (question.statements as Array<Record<string, unknown>>)
+              : [];
+            const situations = Array.isArray(question.situations)
+              ? (question.situations as Array<Record<string, unknown>>)
+              : [];
+            const rows = statements.length > 0 ? statements : situations;
+            const evidenceChoices =
+              texts.length > 0
+                ? texts.map((text) => String(text.id))
+                : ads.length > 0
+                  ? ads.map((ad) => String(ad.id))
+                  : [];
+
+            return (
+              <div key={qid}>
+                {texts.length > 0 ? (
+                  <>
+                    <p className="questionStem">Teksti:</p>
+                    <div className="matchGrid">
+                      {texts.map((text) => (
+                        <article key={String(text.id)} className="matchCard">
+                          <strong>{String(text.id)}</strong>
+                          <p>{String(text.contentLv ?? "")}</p>
+                        </article>
+                      ))}
+                    </div>
+                  </>
+                ) : null}
+
+                {ads.length > 0 ? (
+                  <>
+                    <p className="questionStem">Sludinājumi:</p>
+                    <div className="matchGrid">
+                      {ads.map((ad) => (
+                        <article key={String(ad.id)} className="matchCard">
+                          <strong>{String(ad.id)}</strong>
+                          <p>{String(ad.textLv ?? "")}</p>
+                        </article>
+                      ))}
+                    </div>
+                  </>
+                ) : null}
+
+                <ol className="matchList">
+                  {rows.map((row, rowIndex) => {
+                    const rowId = String(row.id);
+                    const rowText = String(row.textLv ?? rowId);
+                    return (
+                      <li key={rowId} className="matchRow">
+                        <span>{rowIndex + 1}. {rowText}</span>
+                        <input
+                          value={answerFor(task.id, rowId)}
+                          onChange={(event) => setAnswer(task.id, rowId, event.target.value.toUpperCase())}
+                          placeholder="A"
+                        />
+                        {evidenceChoices.length > 0 ? (
+                          <select
+                            value={answerFor(task.id, `evidence::${rowId}`)}
+                            onChange={(event) =>
+                              setAnswer(task.id, `evidence::${rowId}`, event.target.value)
+                            }
+                          >
+                            <option value="">Pierādījums</option>
+                            {evidenceChoices.map((choice) => (
+                              <option value={choice} key={`${rowId}-${choice}`}>
+                                {choice}
+                              </option>
+                            ))}
+                          </select>
+                        ) : null}
+                      </li>
+                    );
+                  })}
+                </ol>
+              </div>
+            );
+          })}
+        </div>
+      );
+    }
+
+    if (task.taskType === "CLOZE") {
+      return (
+        <ol className="blankList">
+          {task.questions.map((question, idx) => {
+            const qid = String(question.id ?? `q${idx + 1}`);
+            const stem = String(question.stemLv ?? "");
+            const options = Array.isArray(question.options)
+              ? question.options.map((option) => String(option))
+              : [];
+
+            return (
+              <li key={qid} className="matchRow">
+                <span>{idx + 1}. {stem}</span>
+                <select
+                  value={answerFor(task.id, qid)}
+                  onChange={(event) => setAnswer(task.id, qid, event.target.value)}
+                >
+                  <option value="">Izvēlies</option>
+                  {options.map((option) => (
+                    <option value={option} key={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              </li>
+            );
+          })}
+        </ol>
+      );
+    }
+
+    if (task.taskType === "PICTURE_SENTENCE") {
+      return (
+        <div className="questionGroup">
+          {task.questions.map((question, idx) => {
+            const qid = String(question.id ?? `q${idx + 1}`);
+            const imageUrl = typeof question.imageUrl === "string" ? question.imageUrl : null;
+            const hint = String(question.imageHint ?? `Attēls ${idx + 1}`);
+            const minWords = Number(question.minWords ?? 5);
+            return (
+              <article className="taskImageRow" key={qid}>
+                <p className="questionStem">
+                  {idx + 1}. Uzraksti teikumu ({minWords}+ vārdi) par attēlu.
+                </p>
+                {imageUrl ? (
+                  <figure className="taskImageWrap">
+                    <img src={imageUrl} alt={hint} className="taskImage" />
+                    <figcaption>{hint}</figcaption>
+                  </figure>
+                ) : null}
+                <textarea
+                  className="linedAnswer"
+                  value={answerFor(task.id, qid)}
+                  onChange={(event) => setAnswer(task.id, qid, event.target.value)}
+                  placeholder="Raksti teikumu šeit..."
+                />
+              </article>
+            );
+          })}
+
+          <div className="grid two">
+            <div>
+              <label htmlFor={`${task.id}-sentenceChecks`}>Sentence checks (0-4)</label>
+              <input
+                id={`${task.id}-sentenceChecks`}
+                type="number"
+                min={0}
+                max={4}
+                value={answerFor(task.id, "sentenceChecks")}
+                onChange={(event) => setAnswer(task.id, "sentenceChecks", event.target.value)}
+              />
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    if (task.taskType === "WORD_FORM") {
+      return (
+        <div className="questionGroup">
+          <ol className="blankList">
+            {task.questions.map((question, idx) => {
+              const qid = String(question.id ?? `q${idx + 1}`);
+              const stem = String(question.stemLv ?? `Jautājums ${idx + 1}`);
+              return (
+                <li key={qid} className="matchRow">
+                  <span>
+                    {idx + 1}. {stem}
+                  </span>
+                  <input
+                    className="blankInput"
+                    value={answerFor(task.id, qid)}
+                    onChange={(event) => setAnswer(task.id, qid, event.target.value)}
+                    placeholder="vārds"
+                  />
+                </li>
+              );
+            })}
+          </ol>
+
+          <div className="grid two">
+            <div>
+              <label htmlFor={`${task.id}-correctForms`}>Correct forms (0-5)</label>
+              <input
+                id={`${task.id}-correctForms`}
+                type="number"
+                min={0}
+                max={5}
+                value={answerFor(task.id, "correctForms")}
+                onChange={(event) => setAnswer(task.id, "correctForms", event.target.value)}
+              />
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    if (task.taskType === "MESSAGE_ADVERT") {
+      const firstQuestion = task.questions[0] ?? {};
+      const bulletPoints = Array.isArray(firstQuestion.bulletPoints)
+        ? firstQuestion.bulletPoints.map((point) => String(point))
+        : [];
+      const minWords = Number(firstQuestion.minWords ?? 35);
+      const qid = String(firstQuestion.id ?? "q1");
+
+      return (
+        <div className="questionGroup">
+          <div className="adPrompt">
+            <p className="questionStem">Uzraksti ziņu, iekļaujot visus punktus:</p>
+            <ul className="examRuleList">
+              {bulletPoints.map((point) => (
+                <li key={point}>{point}</li>
+              ))}
+            </ul>
+            <p className="questionStem">Minimālais apjoms: {minWords} vārdi.</p>
+          </div>
+          <textarea
+            className="linedAnswer"
+            value={answerFor(task.id, qid)}
+            onChange={(event) => setAnswer(task.id, qid, event.target.value)}
+            placeholder="Raksti ziņu šeit..."
+          />
+
+          <div className="grid two">
+            <div>
+              <label htmlFor={`${task.id}-rubricChecks`}>Rubric checks</label>
+              <input
+                id={`${task.id}-rubricChecks`}
+                type="number"
+                min={0}
+                max={6}
+                value={answerFor(task.id, "rubricChecks")}
+                onChange={(event) => setAnswer(task.id, "rubricChecks", event.target.value)}
+              />
+            </div>
+            <div>
+              <label htmlFor={`${task.id}-wordCount`}>Word count</label>
+              <input
+                id={`${task.id}-wordCount`}
+                type="number"
+                min={0}
+                value={answerFor(task.id, "wordCount")}
+                onChange={(event) => setAnswer(task.id, "wordCount", event.target.value)}
+              />
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    if (task.taskType === "INTERVIEW") {
+      return (
+        <div className="questionGroup">
+          <ol className="blankList">
+            {task.questions.map((question, idx) => {
+              const qid = String(question.id ?? `q${idx + 1}`);
+              const prompt = String(question.promptLv ?? question.stemLv ?? `Jautājums ${idx + 1}`);
+              return (
+                <li key={qid} className="questionItem">
+                  <p className="questionStem">
+                    {idx + 1}. {prompt}
+                  </p>
+                  <textarea
+                    className="linedAnswer"
+                    value={answerFor(task.id, qid)}
+                    onChange={(event) => setAnswer(task.id, qid, event.target.value)}
+                    placeholder="Atbilde"
+                  />
+                </li>
+              );
+            })}
+          </ol>
+
+          <div className="grid two">
+            <div>
+              <label htmlFor={`${task.id}-rubricChecks`}>Rubric checks</label>
+              <input
+                id={`${task.id}-rubricChecks`}
+                type="number"
+                min={0}
+                max={5}
+                value={answerFor(task.id, "rubricChecks")}
+                onChange={(event) => setAnswer(task.id, "rubricChecks", event.target.value)}
+              />
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    if (task.taskType === "IMAGE_DESCRIPTION") {
+      return (
+        <div className="questionGroup">
+          {task.questions.map((question, idx) => {
+            const qid = String(question.id ?? `q${idx + 1}`);
+            const imageUrl = typeof question.imageUrl === "string" ? question.imageUrl : null;
+            const hint = String(question.imageHint ?? "attēls");
+            const followUp = String(question.followUp ?? "");
+            return (
+              <article key={qid} className="taskImageRow">
+                <p className="questionStem">
+                  {idx + 1}. Aplūko attēlu un atbildi: KAS? KO DARA? KUR?
+                </p>
+                {imageUrl ? (
+                  <figure className="taskImageWrap">
+                    <img src={imageUrl} alt={hint} className="taskImage" />
+                    <figcaption>{hint}</figcaption>
+                  </figure>
+                ) : null}
+                {followUp ? <p>{followUp}</p> : null}
+                <textarea
+                  className="linedAnswer"
+                  value={answerFor(task.id, qid)}
+                  onChange={(event) => setAnswer(task.id, qid, event.target.value)}
+                  placeholder="Apraksts"
+                />
+              </article>
+            );
+          })}
+
+          <div className="grid two">
+            <div>
+              <label htmlFor={`${task.id}-rubricChecks`}>Rubric checks</label>
+              <input
+                id={`${task.id}-rubricChecks`}
+                type="number"
+                min={0}
+                max={5}
+                value={answerFor(task.id, "rubricChecks")}
+                onChange={(event) => setAnswer(task.id, "rubricChecks", event.target.value)}
+              />
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    if (task.taskType === "AD_QUESTION") {
+      return (
+        <div className="questionGroup">
+          <ol className="blankList">
+            {task.questions.map((question, idx) => {
+              const qid = String(question.id ?? `q${idx + 1}`);
+              const adText = String(question.adText ?? "Sludinājums");
+              const target = String(question.target ?? "informācija");
+              return (
+                <li key={qid} className="questionItem">
+                  <div className="adPrompt">
+                    <strong>{idx + 1}. {adText}</strong>
+                    <p style={{ margin: "0.3rem 0 0" }}>Uzdod jautājumu par: {target}</p>
+                  </div>
+                  <input
+                    value={answerFor(task.id, qid)}
+                    onChange={(event) => setAnswer(task.id, qid, event.target.value)}
+                    placeholder="Uzdod jautājumu"
+                    style={{ marginTop: "0.45rem" }}
+                  />
+                </li>
+              );
+            })}
+          </ol>
+
+          <div className="grid two">
+            <div>
+              <label htmlFor={`${task.id}-rubricChecks`}>Rubric checks</label>
+              <input
+                id={`${task.id}-rubricChecks`}
+                type="number"
+                min={0}
+                max={5}
+                value={answerFor(task.id, "rubricChecks")}
+                onChange={(event) => setAnswer(task.id, "rubricChecks", event.target.value)}
+              />
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="questionGroup">
+        {task.questions.map((question, idx) => {
+          const qid = String(question.id ?? `q${idx + 1}`);
+          const stem = String(question.stemLv ?? `Jautājums ${idx + 1}`);
+          return (
+            <div key={qid} className="questionItem">
+              <p className="questionStem">{stem}</p>
+              <input
+                value={answerFor(task.id, qid)}
+                onChange={(event) => setAnswer(task.id, qid, event.target.value)}
+                placeholder="Atbilde"
+              />
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+
   if (!sessionId) {
     return (
-      <section className="grid">
-        <header className="pageHeader">
-          <h2>Exam Simulator</h2>
-          <p>Select mode and run a full four-section simulation.</p>
-        </header>
+      <section className="examFlow">
+        <article className="examCover">
+          <div className="examMetaRow">
+            <p className="examMetaTitle">Valsts valodas prasmes pārbaude</p>
+            <span className="badge">A2 līmenis</span>
+          </div>
+          <h2 className="examHeading">Pārbaudes uzdevumu paraugi</h2>
+          <p className="examSubheading">Klausīšanās, lasīšanas, rakstīšanas un runāšanas daļas</p>
 
-        <div className="panel" style={{ padding: "1rem" }}>
-          <h3>Simulation Mode</h3>
-          <div className="grid two" style={{ marginTop: "0.7rem" }}>
+          <ul className="examRuleList">
+            <li>Oficiālajā režīmā darbojas servera laika ierobežojumi un sadaļu slēgšana.</li>
+            <li>Klausīšanās daļā atskaņojumu limits: 2 reizes katram uzdevumam.</li>
+            <li>Pēc sadaļas iesniegšanas redzēsi diagnostiku un ieteiktos treniņa uzdevumus.</li>
+          </ul>
+
+          <div className="chipRow" style={{ marginTop: "0.95rem" }}>
             <button
               type="button"
               className={strictness === "OFFICIAL" ? "primaryBtn" : "secondaryBtn"}
@@ -412,13 +1028,13 @@ export function ExamRunner({ tasksBySkill }: { tasksBySkill: GroupedTasks }) {
             </button>
           </div>
 
-          <div className="timerRibbon" style={{ marginTop: "0.8rem" }}>
+          <div className="timerRibbon">
             {strictness === "OFFICIAL"
-              ? "OFFICIAL rules: server lock by deadline, listening replay max 2, transcripts after section submit."
-              : "PRACTICE rules: server timer still active, guided remediation enabled, transcript after task submission."}
+              ? "OFFICIAL: stingrs taimeris, sadaļas lock pēc termiņa, klausīšanās atkārtojumi max 2."
+              : "PRACTICE: servera taimeris saglabāts, atļauta elastīgāka klausīšanās un vadīti ieteikumi."}
           </div>
 
-          <div className="ctaRow" style={{ marginTop: "0.8rem" }}>
+          <div className="ctaRow">
             <button
               className="primaryBtn"
               type="button"
@@ -427,268 +1043,110 @@ export function ExamRunner({ tasksBySkill }: { tasksBySkill: GroupedTasks }) {
               }}
               disabled={busy}
             >
-              {busy ? "Preparing..." : "Start Simulation"}
+              {busy ? "Preparing..." : "Sākt simulāciju"}
             </button>
           </div>
-        </div>
+
+          <div className="paperFooter">
+            <span>LVA2 Simulator</span>
+            <span>VISC, 2026</span>
+          </div>
+        </article>
       </section>
     );
   }
 
   return (
-    <section className="grid">
-      <header className="pageHeader">
-        <h2>Exam Simulator</h2>
-        <p>Server-enforced timing and section lock rules with remediation outputs.</p>
-      </header>
-
-      <div className="panel" style={{ padding: "1rem" }}>
-        <div className="grid two">
-          <div>
-            <p className="badge">Current section</p>
-            <h3>{activeSkill}</h3>
-          </div>
-          <div>
-            <p className="badge">Server countdown</p>
-            <h3>{displayTimer}</h3>
-          </div>
+    <section className="examFlow">
+      <article className="examCover">
+        <div className="examMetaRow">
+          <p className="examMetaTitle">{sectionTitlesLv[activeSkill]}</p>
+          <span className="badge">{strictness}</span>
         </div>
-        <p className="badge" style={{ marginTop: "0.65rem" }}>
-          {strictness} mode
-        </p>
-        <div className="timerRibbon">{status}</div>
-      </div>
+        <h2 className="examHeading">{activeSectionIndex + 1}. sadaļa</h2>
+        <p className="examSubheading">Atlikušais laiks: {displayTimer}</p>
 
-      {sectionTasks.map((task) => (
-        <div className="panel" style={{ padding: "1rem" }} key={task.id}>
-          <p className="badge">
-            {task.taskType.toLowerCase()} · {task.points} pts
-          </p>
-          <h3 style={{ marginTop: "0.6rem" }}>{task.promptLv}</h3>
+        <ul className="examRuleList">
+          {sectionRulesLv[activeSkill].map((rule) => (
+            <li key={rule}>{rule}</li>
+          ))}
+        </ul>
+
+        <div className="timerRibbon">{status}</div>
+        <div className="paperFooter">
+          <span>{activeSkill}</span>
+          <span>VISC, 2026</span>
+        </div>
+      </article>
+
+      {sectionTasks.map((task, index) => (
+        <article className="examSheet" key={task.id}>
+          <header className="examTaskHeader">
+            <p className="badge">{index + 1}. uzdevums</p>
+            <h3 className="examTaskTitle">{task.promptLv}</h3>
+            <p className="examTaskPrompt">
+              {taskTypeTitlesLv[task.taskType] ?? task.taskType} · {task.points} punkti
+            </p>
+          </header>
+
           {activeSkill === "LISTENING" && audioForTask(task) ? (
-            <div style={{ marginTop: "0.7rem" }}>
-              <p className="badge">Audio replay policy</p>
+            <div style={{ marginBottom: "0.85rem" }}>
               <audio
                 controls
                 src={audioForTask(task) ?? undefined}
                 onPlay={(event) => {
                   void onListeningPlay(task.id, event.currentTarget);
                 }}
-                style={{ width: "100%", marginTop: "0.45rem" }}
+                style={{ width: "100%" }}
               />
               <small style={{ color: "var(--ink-soft)" }}>
-                Plays used: {playState[task.id]?.playsUsed ?? 0}
+                Atskaņots: {playState[task.id]?.playsUsed ?? 0}
                 {strictness === "OFFICIAL"
-                  ? `/${2} · remaining ${Math.max(0, playState[task.id]?.playsRemaining ?? 2)}`
-                  : " · practice mode allows extra plays"}
+                  ? `/${2} · atlikušas ${Math.max(0, playState[task.id]?.playsRemaining ?? 2)}`
+                  : " · prakses režīmā atļauti papildu atskaņojumi"}
               </small>
             </div>
           ) : null}
 
-          <div className="grid" style={{ marginTop: "0.8rem" }}>
-            {task.questions.map((question, idx) => {
-              const qid = String(question.id ?? `q${idx + 1}`);
-              const texts = Array.isArray(question.texts) ? (question.texts as Array<Record<string, unknown>>) : [];
-              const ads = Array.isArray(question.ads) ? (question.ads as Array<Record<string, unknown>>) : [];
-              const evidenceChoices =
-                texts.length > 0
-                  ? texts.map((text) => String(text.id))
-                  : ads.length > 0
-                    ? ads.map((ad) => String(ad.id))
-                    : [];
-              const imageSrc =
-                typeof question.imageUrl === "string"
-                  ? question.imageUrl
-                  : typeof question.imageHint === "string" && question.imageHint.toLowerCase().includes("park")
-                    ? "/images/speaking-q1.svg"
-                    : typeof question.imageHint === "string" && question.imageHint.toLowerCase().includes("kafejn")
-                      ? "/images/speaking-q2.svg"
-                      : qid === "q1"
-                        ? "/images/writing-q1.svg"
-                        : qid === "q2"
-                          ? "/images/writing-q2.svg"
-                          : qid === "q3"
-                            ? "/images/writing-q3.svg"
-                            : qid === "q4"
-                              ? "/images/writing-q4.svg"
-                              : null;
-
-              if (Array.isArray(question.statements)) {
-                const statements = question.statements as Array<Record<string, unknown>>;
-                return (
-                  <div key={qid} className="card">
-                    <h4>Statements</h4>
-                    {texts.length > 0 ? (
-                      <div className="sourceBlock">
-                        <p className="sourceTitle">Read these texts first:</p>
-                        {texts.map((text) => (
-                          <div className="sourceItem" key={String(text.id)}>
-                            <strong>{String(text.id)}.</strong> {String(text.contentLv ?? "")}
-                          </div>
-                        ))}
-                      </div>
-                    ) : null}
-                    {statements.map((statement) => {
-                      const rowId = String(statement.id);
-                      return (
-                        <div key={rowId} style={{ marginBottom: "0.55rem" }}>
-                          <label htmlFor={`${task.id}-${rowId}`}>{String(statement.textLv ?? rowId)}</label>
-                          <input
-                            id={`${task.id}-${rowId}`}
-                            value={answers[`${task.id}::${rowId}`] ?? ""}
-                            onChange={(event) => setAnswer(task.id, rowId, event.target.value)}
-                            placeholder="A / B / C"
-                          />
-                          {evidenceChoices.length > 0 ? (
-                            <>
-                              <label htmlFor={`${task.id}-evidence-${rowId}`}>Evidence source</label>
-                              <select
-                                id={`${task.id}-evidence-${rowId}`}
-                                value={answers[`${task.id}::evidence::${rowId}`] ?? ""}
-                                onChange={(event) =>
-                                  setAnswer(task.id, `evidence::${rowId}`, event.target.value)
-                                }
-                              >
-                                <option value="">Select source</option>
-                                {evidenceChoices.map((choice) => (
-                                  <option key={choice} value={choice}>
-                                    {choice}
-                                  </option>
-                                ))}
-                              </select>
-                            </>
-                          ) : null}
-                        </div>
-                      );
-                    })}
-                  </div>
-                );
-              }
-
-              if (Array.isArray(question.situations)) {
-                const situations = question.situations as Array<Record<string, unknown>>;
-                return (
-                  <div key={qid} className="card">
-                    <h4>Situations</h4>
-                    {ads.length > 0 ? (
-                      <div className="sourceBlock">
-                        <p className="sourceTitle">Available ads:</p>
-                        {ads.map((ad) => (
-                          <div className="sourceItem" key={String(ad.id)}>
-                            <strong>{String(ad.id)}.</strong> {String(ad.textLv ?? "")}
-                          </div>
-                        ))}
-                      </div>
-                    ) : null}
-                    {situations.map((situation) => {
-                      const rowId = String(situation.id);
-                      return (
-                        <div key={rowId} style={{ marginBottom: "0.55rem" }}>
-                          <label htmlFor={`${task.id}-${rowId}`}>{String(situation.textLv ?? rowId)}</label>
-                          <input
-                            id={`${task.id}-${rowId}`}
-                            value={answers[`${task.id}::${rowId}`] ?? ""}
-                            onChange={(event) => setAnswer(task.id, rowId, event.target.value)}
-                            placeholder="A / B / C"
-                          />
-                          {evidenceChoices.length > 0 ? (
-                            <>
-                              <label htmlFor={`${task.id}-evidence-${rowId}`}>Evidence source</label>
-                              <select
-                                id={`${task.id}-evidence-${rowId}`}
-                                value={answers[`${task.id}::evidence::${rowId}`] ?? ""}
-                                onChange={(event) =>
-                                  setAnswer(task.id, `evidence::${rowId}`, event.target.value)
-                                }
-                              >
-                                <option value="">Select source</option>
-                                {evidenceChoices.map((choice) => (
-                                  <option key={choice} value={choice}>
-                                    {choice}
-                                  </option>
-                                ))}
-                              </select>
-                            </>
-                          ) : null}
-                        </div>
-                      );
-                    })}
-                  </div>
-                );
-              }
-
-              const options = Array.isArray(question.options) ? (question.options as string[]) : [];
-              return (
-                <div className="card" key={qid}>
-                  {imageSrc ? (
-                    <figure className="taskImageWrap">
-                      <img
-                        src={imageSrc}
-                        alt={typeof question.imageHint === "string" ? question.imageHint : `Task image ${qid}`}
-                        className="taskImage"
-                      />
-                      {typeof question.imageHint === "string" ? <figcaption>{question.imageHint}</figcaption> : null}
-                    </figure>
-                  ) : null}
-                  <label htmlFor={`${task.id}-${qid}`}>{String(question.stemLv ?? `Question ${idx + 1}`)}</label>
-                  {options.length > 0 ? (
-                    <select
-                      id={`${task.id}-${qid}`}
-                      value={answers[`${task.id}::${qid}`] ?? ""}
-                      onChange={(event) => setAnswer(task.id, qid, event.target.value)}
-                    >
-                      <option value="">Select</option>
-                      {options.map((option) => (
-                        <option key={option} value={option}>
-                          {option}
-                        </option>
-                      ))}
-                    </select>
-                  ) : (
-                    <input
-                      id={`${task.id}-${qid}`}
-                      value={answers[`${task.id}::${qid}`] ?? ""}
-                      onChange={(event) => setAnswer(task.id, qid, event.target.value)}
-                      placeholder="Type answer"
-                    />
-                  )}
-                </div>
-              );
-            })}
-          </div>
+          {renderTaskBody(task)}
 
           {task.transcript && transcriptVisible(task.id) ? (
-            <details style={{ marginTop: "0.7rem" }}>
-              <summary>Transcript</summary>
+            <details style={{ marginTop: "0.9rem" }}>
+              <summary>Transkripts</summary>
               <p>{task.transcript}</p>
             </details>
           ) : null}
-        </div>
+
+          <div className="paperFooter">
+            <span>{pageStamp(activeSkill, index)}</span>
+            <span>VISC, 2026</span>
+          </div>
+        </article>
       ))}
 
       {sectionSummary ? (
-        <div className="panel" style={{ padding: "1rem" }}>
-          <h3>Section Diagnostic</h3>
+        <article className="examSummary">
+          <h3 style={{ marginTop: 0 }}>Sadaļas rezultāts</h3>
           <p>
             {sectionSummary.sectionResult.skill}: {sectionSummary.sectionResult.score}/
-            {sectionSummary.sectionResult.maxScore} · {sectionSummary.sectionResult.passed ? "PASS" : "FAIL"}
-            {sectionSummary.sectionResult.status === "EXPIRED" ? " · expired" : ""}
+            {sectionSummary.sectionResult.maxScore} · {sectionSummary.sectionResult.passed ? "NOKĀRTOTS" : "NENOKĀRTOTS"}
+            {sectionSummary.sectionResult.status === "EXPIRED" ? " · termiņš beidzies" : ""}
           </p>
 
-          <div className="grid two" style={{ marginTop: "0.7rem" }}>
+          <div className="grid two" style={{ marginTop: "0.65rem" }}>
             <div>
-              <p className="badge">Weak task types</p>
-              <p>{sectionSummary.weakTaskTypes.length > 0 ? sectionSummary.weakTaskTypes.join(", ") : "None flagged"}</p>
+              <p className="badge">Vājie uzdevumu tipi</p>
+              <p>{sectionSummary.weakTaskTypes.length > 0 ? sectionSummary.weakTaskTypes.join(", ") : "Nav"}</p>
             </div>
             <div>
-              <p className="badge">Weak topics</p>
-              <p>{sectionSummary.weakTopics.length > 0 ? sectionSummary.weakTopics.join(", ") : "None flagged"}</p>
+              <p className="badge">Vājās tēmas</p>
+              <p>{sectionSummary.weakTopics.length > 0 ? sectionSummary.weakTopics.join(", ") : "Nav"}</p>
             </div>
           </div>
 
-          <div style={{ marginTop: "0.8rem" }}>
-            <p className="badge">Practice this now</p>
-            <div className="ctaRow" style={{ marginTop: "0.4rem", flexWrap: "wrap" }}>
+          <div style={{ marginTop: "0.75rem" }}>
+            <p className="badge">Ieteiktie treniņi</p>
+            <div className="ctaRow" style={{ marginTop: "0.35rem" }}>
               {sectionSummary.recommendedTaskIds.map((taskId) => (
                 <Link
                   key={taskId}
@@ -702,38 +1160,42 @@ export function ExamRunner({ tasksBySkill }: { tasksBySkill: GroupedTasks }) {
           </div>
 
           {activeSectionIndex + 1 < sectionOrder.length ? (
-            <div className="ctaRow" style={{ marginTop: "0.9rem" }}>
+            <div className="ctaRow" style={{ marginTop: "0.8rem" }}>
               <button className="primaryBtn" type="button" onClick={continueToNextSection}>
-                Continue to {sectionOrder[activeSectionIndex + 1]}
+                Turpināt uz {sectionOrder[activeSectionIndex + 1]}
               </button>
             </div>
           ) : null}
-        </div>
+        </article>
       ) : (
-        <div className="ctaRow">
-          <button className="primaryBtn" type="button" onClick={submitCurrentSection} disabled={busy}>
-            {busy ? "Submitting..." : `Submit ${activeSkill}`}
-          </button>
-        </div>
+        <article className="examSummary">
+          <h3 style={{ marginTop: 0 }}>Iesniegšana</h3>
+          <p>Kad esi pabeidzis visus šīs sadaļas uzdevumus, iesniedz atbildes.</p>
+          <div className="ctaRow">
+            <button className="primaryBtn" type="button" onClick={submitCurrentSection} disabled={busy}>
+              {busy ? "Submitting..." : `Iesniegt ${activeSkill}`}
+            </button>
+          </div>
+        </article>
       )}
 
       {finalResult ? (
-        <div className="panel" style={{ padding: "1rem" }}>
-          <h3>Final Exam Result</h3>
+        <article className="examSummary">
+          <h3 style={{ marginTop: 0 }}>Pārbaudījuma gala rezultāts</h3>
           <p>
-            {finalResult.passAll ? "PASS" : "FAIL"} · total score {finalResult.totalScore ?? 0}
+            {finalResult.passAll ? "PASS" : "FAIL"} · kopējais punktu skaits {finalResult.totalScore ?? 0}
           </p>
 
-          <div className="grid" style={{ marginTop: "0.8rem" }}>
+          <div className="grid" style={{ marginTop: "0.75rem" }}>
             <article className="card">
-              <h4>Why this failed</h4>
+              <h4>Kāpēc rezultāts ir šāds</h4>
               {finalResult.failReasonsDetailed.length === 0 ? (
-                <p>All section criteria met.</p>
+                <p>Visi sadaļu kritēriji izpildīti.</p>
               ) : (
                 <ul>
                   {finalResult.failReasonsDetailed.map((item) => (
                     <li key={item.skill}>
-                      {item.skill}: {item.actualScore}/{item.requiredScore} required, shortfall {item.shortfall}. {item.explanation}
+                      {item.skill}: {item.actualScore}/{item.requiredScore}, iztrūkums {item.shortfall}. {item.explanation}
                     </li>
                   ))}
                 </ul>
@@ -741,16 +1203,16 @@ export function ExamRunner({ tasksBySkill }: { tasksBySkill: GroupedTasks }) {
             </article>
 
             <article className="card">
-              <h4>What to do next</h4>
+              <h4>Nākamie soļi</h4>
               {finalResult.remediationPlan.map((plan) => (
-                <div key={plan.skill} style={{ marginBottom: "0.8rem" }}>
+                <div key={plan.skill} style={{ marginBottom: "0.75rem" }}>
                   <p className="badge">{plan.skill}</p>
                   <p>
-                    Weak types: {plan.weakTaskTypes.length > 0 ? plan.weakTaskTypes.join(", ") : "None"}
+                    Vājie tipi: {plan.weakTaskTypes.length > 0 ? plan.weakTaskTypes.join(", ") : "Nav"}
                     <br />
-                    Weak topics: {plan.weakTopics.length > 0 ? plan.weakTopics.join(", ") : "None"}
+                    Vājās tēmas: {plan.weakTopics.length > 0 ? plan.weakTopics.join(", ") : "Nav"}
                   </p>
-                  <div className="ctaRow" style={{ flexWrap: "wrap" }}>
+                  <div className="ctaRow">
                     {plan.recommendedTaskIds.slice(0, 3).map((taskId) => (
                       <Link
                         key={`${plan.skill}-${taskId}`}
@@ -766,12 +1228,12 @@ export function ExamRunner({ tasksBySkill }: { tasksBySkill: GroupedTasks }) {
             </article>
           </div>
 
-          <div className="ctaRow" style={{ marginTop: "0.7rem" }}>
+          <div className="ctaRow" style={{ marginTop: "0.65rem" }}>
             <Link className="primaryBtn buttonLike" href="/analytics">
               Open Analytics
             </Link>
           </div>
-        </div>
+        </article>
       ) : null}
     </section>
   );

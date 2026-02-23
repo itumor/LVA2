@@ -5,11 +5,11 @@ import { useRef, useState } from "react";
 export function SpeakingRecorder({ taskId }: { taskId?: string }) {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
+  const startTsRef = useRef<number | null>(null);
+  const durationSecRef = useRef(0);
   const [recording, setRecording] = useState(false);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [uploadMessage, setUploadMessage] = useState<string>("");
-  const [durationSec, setDurationSec] = useState(0);
-  const [startTs, setStartTs] = useState<number | null>(null);
 
   async function startRecording() {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -32,7 +32,7 @@ export function SpeakingRecorder({ taskId }: { taskId?: string }) {
       if (taskId) {
         formData.append("taskId", taskId);
       }
-      formData.append("durationSec", String(durationSec));
+      formData.append("durationSec", String(durationSecRef.current));
 
       const response = await fetch("/api/audio/upload", {
         method: "POST",
@@ -51,7 +51,8 @@ export function SpeakingRecorder({ taskId }: { taskId?: string }) {
       }
     };
 
-    setStartTs(Date.now());
+    startTsRef.current = Date.now();
+    durationSecRef.current = 0;
     recorder.start();
     mediaRecorderRef.current = recorder;
     setRecording(true);
@@ -60,11 +61,12 @@ export function SpeakingRecorder({ taskId }: { taskId?: string }) {
 
   function stopRecording() {
     if (!mediaRecorderRef.current) return;
+    if (startTsRef.current) {
+      durationSecRef.current = Math.max(0, Math.round((Date.now() - startTsRef.current) / 1000));
+    }
     mediaRecorderRef.current.stop();
     setRecording(false);
-    if (startTs) {
-      setDurationSec(Math.round((Date.now() - startTs) / 1000));
-    }
+    startTsRef.current = null;
   }
 
   return (
