@@ -5,6 +5,7 @@ export default defineConfig({
   test: {
     globals: true,
     environment: "node",
+    exclude: ["**/node_modules/**", "**/.next/**", "**/dist/**", "**/coverage/**"],
     coverage: {
       reporter: ["text", "html"],
     },

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from "react";
 import { useSearchParams } from "next/navigation";
+import { getClientTtsConfig } from "@/lib/tts-client";
 
 type Question = Record<string, unknown>;
 
@@ -193,13 +194,14 @@ export function TrainerWorkspace({
   const [selectedWord, setSelectedWord] = useState<string | null>(null);
   const [draggingWord, setDraggingWord] = useState<string | null>(null);
   const [speechSupported, setSpeechSupported] = useState(false);
-  const [promptAudioSupported, setPromptAudioSupported] = useState(false);
   const [speechTargetQuestionId, setSpeechTargetQuestionId] = useState<string | null>(null);
   const [speakingQuestionId, setSpeakingQuestionId] = useState<string | null>(null);
   const [speechInterimText, setSpeechInterimText] = useState("");
   const [speechError, setSpeechError] = useState<string | null>(null);
   const speechRecognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const promptUtteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
+  const promptAudioRef = useRef<HTMLAudioElement | null>(null);
+  const promptAudioAbortRef = useRef<AbortController | null>(null);
 
   const task = tasks[taskIndex];
 
@@ -243,14 +245,17 @@ export function TrainerWorkspace({
     if (typeof window === "undefined") return;
     const speechWindow = window as SpeechWindow;
     setSpeechSupported(Boolean(speechWindow.SpeechRecognition || speechWindow.webkitSpeechRecognition));
-    setPromptAudioSupported(
-      Boolean(window.speechSynthesis && typeof window.SpeechSynthesisUtterance === "function"),
-    );
   }, []);
 
   useEffect(() => {
     return () => {
       speechRecognitionRef.current?.stop();
+      promptAudioAbortRef.current?.abort();
+      promptAudioAbortRef.current = null;
+      if (promptAudioRef.current) {
+        promptAudioRef.current.pause();
+        promptAudioRef.current = null;
+      }
       if (typeof window !== "undefined") {
         window.speechSynthesis?.cancel();
       }
@@ -314,6 +319,13 @@ export function TrainerWorkspace({
   }
 
   function stopPromptAudio(resetState = true) {
+    promptAudioAbortRef.current?.abort();
+    promptAudioAbortRef.current = null;
+    if (promptAudioRef.current) {
+      promptAudioRef.current.pause();
+      promptAudioRef.current.currentTime = 0;
+      promptAudioRef.current = null;
+    }
     if (typeof window !== "undefined") {
       window.speechSynthesis?.cancel();
     }
@@ -323,13 +335,70 @@ export function TrainerWorkspace({
     }
   }
 
-  function playPromptAudio(questionId: string, promptText: string) {
+  async function playPromptAudio(questionId: string, promptText: string) {
     const cleanPrompt = promptText.trim();
     if (!cleanPrompt || typeof window === "undefined") return;
-    if (!window.speechSynthesis || typeof window.SpeechSynthesisUtterance !== "function") return;
 
     stopSpeechRecognition();
-    stopPromptAudio();
+    stopPromptAudio(false);
+    setSpeakingQuestionId(questionId);
+
+    const controller = new AbortController();
+    promptAudioAbortRef.current = controller;
+
+    try {
+      const config = await getClientTtsConfig();
+      const response = await fetch("/api/tts/synthesize", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text: cleanPrompt,
+          lang: "lv",
+          provider: config?.provider,
+          rate: config?.rate ?? 0.95,
+          voice: config?.modelId,
+        }),
+        signal: controller.signal,
+      });
+
+      const payload = (await response.json()) as
+        | { ok: true; data: { audioUrl: string } }
+        | { ok: false; error?: string; code?: string };
+      if (!response.ok || !payload.ok) {
+        throw new Error(payload.ok ? "TTS request failed." : payload.error || "TTS request failed.");
+      }
+
+      if (controller.signal.aborted) return;
+
+      const audio = new Audio(payload.data.audioUrl);
+      promptAudioRef.current = audio;
+      audio.onended = () => {
+        if (promptAudioRef.current === audio) {
+          promptAudioRef.current = null;
+        }
+        setSpeakingQuestionId((current) => (current === questionId ? null : current));
+      };
+      audio.onerror = () => {
+        if (promptAudioRef.current === audio) {
+          promptAudioRef.current = null;
+        }
+        setSpeakingQuestionId((current) => (current === questionId ? null : current));
+        setSpeechError("Question audio failed. Check local TTS service.");
+      };
+
+      await audio.play();
+      return;
+    } catch (error) {
+      if (controller.signal.aborted) return;
+      if (!(error instanceof Error && error.name === "AbortError")) {
+        setSpeechError(error instanceof Error ? error.message : "Question audio failed. Trying browser voice...");
+      }
+    }
+
+    if (!window.speechSynthesis || typeof window.SpeechSynthesisUtterance !== "function") {
+      setSpeakingQuestionId(null);
+      return;
+    }
 
     const utterance = new window.SpeechSynthesisUtterance(cleanPrompt);
     utterance.lang = "lv-LV";
@@ -348,7 +417,6 @@ export function TrainerWorkspace({
     };
 
     promptUtteranceRef.current = utterance;
-    setSpeakingQuestionId(questionId);
     window.speechSynthesis.speak(utterance);
   }
 
@@ -452,8 +520,13 @@ export function TrainerWorkspace({
       <button
         type="button"
         className={`${speaking ? "primaryBtn" : "secondaryBtn"} promptAudioBtn`}
-        onClick={() => (speaking ? stopPromptAudio() : playPromptAudio(questionId, promptText))}
-        disabled={!promptAudioSupported}
+        onClick={() => {
+          if (speaking) {
+            stopPromptAudio();
+          } else {
+            void playPromptAudio(questionId, promptText);
+          }
+        }}
       >
         {speaking ? "Stop question audio" : "Play question"}
       </button>

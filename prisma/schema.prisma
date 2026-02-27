@@ -71,6 +71,9 @@ model LearnerProfile {
   reviewCards        ReviewCard[]
   speakingRecordings SpeakingRecording[]
   dailyPlans         DailyPlanLog[]
+  ttsConfig          LearnerTtsConfig?
+  sttConfig          LearnerSttConfig?
+  ttsBenchmarkRuns   TtsBenchmarkRun[]
 }
 
 model ExamBlueprint {
@@ -219,4 +222,58 @@ model DailyPlanLog {
 
   @@unique([learnerId, planDate])
   @@index([learnerId, planDate])
+}
+
+model LearnerTtsConfig {
+  id        String         @id @default(cuid())
+  learnerId String         @unique
+  learner   LearnerProfile @relation(fields: [learnerId], references: [id], onDelete: Cascade)
+  modelId   String
+  provider  String         @default("piper")
+  rate      Float
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  @@index([learnerId])
+}
+
+model LearnerSttConfig {
+  id        String         @id @default(cuid())
+  learnerId String         @unique
+  learner   LearnerProfile @relation(fields: [learnerId], references: [id], onDelete: Cascade)
+  modelId   String
+  provider  String
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  @@index([learnerId])
+}
+
+model TtsBenchmarkRun {
+  id         String             @id @default(cuid())
+  learnerId  String
+  learner    LearnerProfile     @relation(fields: [learnerId], references: [id], onDelete: Cascade)
+  modelId    String
+  rate       Float
+  promptId   String?
+  promptText String
+  latencyMs  Int?
+  audioUrl   String?
+  cacheHit   Boolean            @default(false)
+  error      String?
+  createdAt  DateTime           @default(now())
+  rating     TtsBenchmarkRating?
+
+  @@index([learnerId, modelId, createdAt(sort: Desc)])
+  @@index([learnerId])
+}
+
+model TtsBenchmarkRating {
+  id            String          @id @default(cuid())
+  runId         String          @unique
+  run           TtsBenchmarkRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  naturalness   Int
+  pronunciation Int
+  notes         String?
+  createdAt     DateTime        @default(now())
 }

@@ -16,6 +16,8 @@
 # next.js
 /.next/
 /out/
+/public/tts-cache/
+/tts-models/
 
 # production
 /build

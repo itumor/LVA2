@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { getClientTtsConfig } from "@/lib/tts-client";
 
 const sectionOrder = ["LISTENING", "READING", "WRITING", "SPEAKING"] as const;
 const sectionMinutes: Record<(typeof sectionOrder)[number], number> = {
@@ -54,6 +55,10 @@ const taskTypeTitlesLv: Record<string, string> = {
   INTERVIEW: "Atbildi uz jautājumiem",
   IMAGE_DESCRIPTION: "Apraksti attēlu",
   AD_QUESTION: "Uzdod jautājumu par sludinājumu",
+};
+
+const fillBlankDistractorsByTaskId: Record<string, string[]> = {
+  listen_short_dialog_fill_001: ["veikala", "autobusu", "54", "23.10"],
 };
 
 type ExamStrictness = "OFFICIAL" | "PRACTICE";
@@ -159,6 +164,13 @@ export function ExamRunner({ tasksBySkill }: { tasksBySkill: GroupedTasks }) {
   const [submittedTaskIds, setSubmittedTaskIds] = useState<Record<string, boolean>>({});
   const [sectionSummary, setSectionSummary] = useState<SectionSummary | null>(null);
   const [finalResult, setFinalResult] = useState<FinalResult | null>(null);
+  const [speakingQuestionId, setSpeakingQuestionId] = useState<string | null>(null);
+  const [selectedWord, setSelectedWord] = useState<string | null>(null);
+  const [draggingWord, setDraggingWord] = useState<string | null>(null);
+  const [promptAudioSupported, setPromptAudioSupported] = useState(false);
+  const promptAudioUtteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
+  const promptAudioRef = useRef<HTMLAudioElement | null>(null);
+  const promptAudioAbortRef = useRef<AbortController | null>(null);
 
   const activeSkill = sectionOrder[activeSectionIndex];
   const sectionTasks = tasksBySkill[activeSkill] ?? [];
@@ -232,6 +244,25 @@ export function ExamRunner({ tasksBySkill }: { tasksBySkill: GroupedTasks }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [busy, finalResult, remainingSec, sectionSummary, sessionId]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    setPromptAudioSupported("speechSynthesis" in window && typeof SpeechSynthesisUtterance !== "undefined");
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      promptAudioAbortRef.current?.abort();
+      promptAudioAbortRef.current = null;
+      if (promptAudioRef.current) {
+        promptAudioRef.current.pause();
+        promptAudioRef.current = null;
+      }
+      if (typeof window !== "undefined" && "speechSynthesis" in window) {
+        window.speechSynthesis.cancel();
+      }
+    };
+  }, []);
+
   const displayTimer = useMemo(() => {
     const min = Math.floor(remainingSec / 60)
       .toString()
@@ -248,6 +279,62 @@ export function ExamRunner({ tasksBySkill }: { tasksBySkill: GroupedTasks }) {
 
   function answerFor(taskId: string, questionId: string) {
     return answers[`${taskId}::${questionId}`] ?? "";
+  }
+
+  function fillBlankQuestionIds(task: ExamTask) {
+    if (task.taskType !== "FILL_BLANK") return [];
+    return task.questions.map((question, idx) => String(question.id ?? `q${idx + 1}`));
+  }
+
+  function fillBlankWordBank(task: ExamTask) {
+    if (task.taskType !== "FILL_BLANK") return [];
+
+    const words: string[] = [];
+    for (const question of task.questions) {
+      if (Array.isArray(question.options)) {
+        for (const option of question.options) {
+          words.push(String(option));
+        }
+      }
+      if (typeof question.correctAnswer === "string") {
+        words.push(question.correctAnswer);
+      }
+    }
+
+    for (const distractor of fillBlankDistractorsByTaskId[task.id] ?? []) {
+      words.push(distractor);
+    }
+
+    return words.filter((word, index, arr) => word && arr.indexOf(word) === index);
+  }
+
+  function assignFillBlankAnswer(task: ExamTask, questionId: string, value: string) {
+    if (!value) return;
+    const ids = fillBlankQuestionIds(task);
+    setAnswers((prev) => {
+      const next = { ...prev };
+      for (const existingId of ids) {
+        const key = `${task.id}::${existingId}`;
+        if (existingId !== questionId && String(next[key] ?? "") === value) {
+          next[key] = "";
+        }
+      }
+      next[`${task.id}::${questionId}`] = value;
+      return next;
+    });
+    setSelectedWord(null);
+    setDraggingWord(null);
+  }
+
+  function clearFillBlankAnswer(taskId: string, questionId: string) {
+    setAnswer(taskId, questionId, "");
+  }
+
+  function onBlankDrop(task: ExamTask, questionId: string, event: DragEvent<HTMLButtonElement>) {
+    event.preventDefault();
+    const droppedWord = event.dataTransfer.getData("text/plain");
+    const value = droppedWord || draggingWord || selectedWord;
+    if (value) assignFillBlankAnswer(task, questionId, value);
   }
 
   function audioForTask(task: ExamTask) {
@@ -465,6 +552,8 @@ export function ExamRunner({ tasksBySkill }: { tasksBySkill: GroupedTasks }) {
     setPlayState({});
     setSubmittedTaskIds({});
     setSectionSummary(null);
+    setSelectedWord(null);
+    setDraggingWord(null);
   }
 
   function transcriptVisible(taskId: string) {
@@ -472,6 +561,129 @@ export function ExamRunner({ tasksBySkill }: { tasksBySkill: GroupedTasks }) {
       return Boolean(sectionSummary);
     }
     return Boolean(submittedTaskIds[taskId]);
+  }
+
+  function stopPromptAudio(resetState = true) {
+    promptAudioAbortRef.current?.abort();
+    promptAudioAbortRef.current = null;
+    if (promptAudioRef.current) {
+      promptAudioRef.current.pause();
+      promptAudioRef.current.currentTime = 0;
+      promptAudioRef.current = null;
+    }
+
+    if (typeof window !== "undefined" && "speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+    }
+    promptAudioUtteranceRef.current = null;
+    if (resetState) setSpeakingQuestionId(null);
+  }
+
+  async function playPromptAudio(questionId: string, promptText: string) {
+    if (typeof window === "undefined" || !promptText.trim()) return;
+    stopPromptAudio(false);
+    setSpeakingQuestionId(questionId);
+
+    const controller = new AbortController();
+    promptAudioAbortRef.current = controller;
+
+    try {
+      const config = await getClientTtsConfig();
+      const response = await fetch("/api/tts/synthesize", {
+        // Pull persisted model/rate once and reuse in client cache.
+        // Route still applies server-side defaults if this is unavailable.
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
+        body: JSON.stringify({
+          text: promptText,
+          lang: "lv",
+          provider: config?.provider,
+          rate: config?.rate ?? 0.95,
+          voice: config?.modelId,
+        }),
+      });
+
+      const payload = (await response.json()) as
+        | { ok: true; data: { audioUrl: string } }
+        | { ok: false; error?: string; code?: string };
+
+      if (!response.ok || !payload.ok) {
+        throw new Error(payload.ok ? "TTS request failed" : payload.error || "TTS request failed");
+      }
+
+      if (controller.signal.aborted) return;
+
+      const audio = new Audio(payload.data.audioUrl);
+      promptAudioRef.current = audio;
+      audio.onended = () => {
+        if (promptAudioRef.current === audio) {
+          promptAudioRef.current = null;
+        }
+        setSpeakingQuestionId((current) => (current === questionId ? null : current));
+      };
+      audio.onerror = () => {
+        if (promptAudioRef.current === audio) {
+          promptAudioRef.current = null;
+        }
+        setSpeakingQuestionId((current) => (current === questionId ? null : current));
+        setStatus("Question audio failed. Check local TTS service.");
+      };
+
+      await audio.play();
+      return;
+    } catch (error) {
+      if (controller.signal.aborted) return;
+      if (!(error instanceof Error && error.name === "AbortError")) {
+        setStatus(error instanceof Error ? error.message : "Question audio failed. Trying browser voice...");
+      }
+    }
+
+    if (!promptAudioSupported) {
+      setSpeakingQuestionId(null);
+      return;
+    }
+
+    const utterance = new SpeechSynthesisUtterance(promptText);
+    utterance.lang = "lv-LV";
+    utterance.rate = 0.95;
+    utterance.onend = () => {
+      if (promptAudioUtteranceRef.current === utterance) {
+        promptAudioUtteranceRef.current = null;
+        setSpeakingQuestionId((current) => (current === questionId ? null : current));
+      }
+    };
+    utterance.onerror = () => {
+      if (promptAudioUtteranceRef.current === utterance) {
+        promptAudioUtteranceRef.current = null;
+        setSpeakingQuestionId((current) => (current === questionId ? null : current));
+      }
+    };
+
+    promptAudioUtteranceRef.current = utterance;
+    window.speechSynthesis.speak(utterance);
+  }
+
+  function renderPromptAudioControl(questionId: string, promptText: string) {
+    if (activeSkill !== "SPEAKING") return null;
+    if (!promptText.trim()) return null;
+
+    const speaking = speakingQuestionId === questionId;
+    return (
+      <button
+        type="button"
+        className={`${speaking ? "primaryBtn" : "secondaryBtn"} promptAudioBtn`}
+        onClick={() => {
+          if (speaking) {
+            stopPromptAudio();
+          } else {
+            void playPromptAudio(questionId, promptText);
+          }
+        }}
+      >
+        {speaking ? "Stop question audio" : "Play question"}
+      </button>
+    );
   }
 
   function renderTaskBody(task: ExamTask) {
@@ -557,28 +769,90 @@ export function ExamRunner({ tasksBySkill }: { tasksBySkill: GroupedTasks }) {
     }
 
     if (task.taskType === "FILL_BLANK") {
-      return (
-        <ol className="blankList">
-          {task.questions.map((question, idx) => {
-            const qid = String(question.id ?? `q${idx + 1}`);
-            const stem = String(question.stemLv ?? "");
+      const questionIds = fillBlankQuestionIds(task);
+      const wordBank = fillBlankWordBank(task);
+      const activeWordsUsed = new Map<string, string>();
+      for (const questionId of questionIds) {
+        const value = String(answerFor(task.id, questionId) ?? "");
+        if (value) activeWordsUsed.set(value, questionId);
+      }
 
-            return (
-              <li key={qid} className="matchRow">
-                {renderStemWithBlank(
-                  `${idx + 1}. ${stem}`,
-                  <input
-                    id={`${task.id}-${qid}`}
-                    className="blankInput"
-                    value={answerFor(task.id, qid)}
-                    onChange={(event) => setAnswer(task.id, qid, event.target.value)}
-                    placeholder="..."
-                  />,
-                )}
-              </li>
-            );
-          })}
-        </ol>
+      return (
+        <div className="questionGroup">
+          <ul className="examRuleList" style={{ marginTop: 0 }}>
+            <li>Klausieties sarunas! Sarunas skanēs divas reizes.</li>
+            <li>
+              Ievelciet atbilstošo skaitli vai vārdu! <u>Četras atbildes ir liekas.</u>
+            </li>
+          </ul>
+
+          <ol className="blankList">
+            {task.questions.map((question, idx) => {
+              const qid = String(question.id ?? `q${idx + 1}`);
+              const stem = String(question.stemLv ?? "");
+              const value = String(answerFor(task.id, qid) ?? "");
+
+              return (
+                <li key={qid} className="matchRow">
+                  {renderStemWithBlank(
+                    `${idx + 1}. ${stem}`,
+                    <button
+                      type="button"
+                      className={`blankDrop ${value ? "filled" : ""}`}
+                      onDragOver={(event) => event.preventDefault()}
+                      onDrop={(event) => onBlankDrop(task, qid, event)}
+                      onClick={() => {
+                        if (selectedWord) {
+                          assignFillBlankAnswer(task, qid, selectedWord);
+                          return;
+                        }
+                        if (value) clearFillBlankAnswer(task.id, qid);
+                      }}
+                    >
+                      {value || "..."}
+                    </button>,
+                  )}
+                </li>
+              );
+            })}
+          </ol>
+
+          {wordBank.length > 0 ? (
+            <>
+              <div className="wordBankDivider" />
+              <div className="chipRow wordBankWrap">
+                {wordBank.map((word) => {
+                  const usedByQuestion = activeWordsUsed.get(word);
+                  const isUsed = Boolean(usedByQuestion);
+                  const isSelected = selectedWord === word;
+                  return (
+                    <button
+                      key={word}
+                      type="button"
+                      draggable={!isUsed}
+                      className={`answerChip dragWordChip ${isSelected ? "selected" : ""} ${isUsed ? "used" : ""}`}
+                      onDragStart={(event) => {
+                        event.dataTransfer.setData("text/plain", word);
+                        setDraggingWord(word);
+                      }}
+                      onDragEnd={() => setDraggingWord(null)}
+                      onClick={() => {
+                        if (isUsed) return;
+                        setSelectedWord((prev) => (prev === word ? null : word));
+                      }}
+                      disabled={isUsed}
+                    >
+                      {word}
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="fillBlankHint">
+                Velc vārdu uz tukšo lauku, vai izvēlies vārdu un pēc tam klikšķini uz tukšās vietas.
+              </p>
+            </>
+          ) : null}
+        </div>
       );
     }
 
@@ -641,29 +915,30 @@ export function ExamRunner({ tasksBySkill }: { tasksBySkill: GroupedTasks }) {
                   {rows.map((row, rowIndex) => {
                     const rowId = String(row.id);
                     const rowText = String(row.textLv ?? rowId);
+                    const selectedChoice = String(
+                      answerFor(task.id, rowId) ?? answerFor(task.id, `evidence::${rowId}`) ?? "",
+                    );
                     return (
                       <li key={rowId} className="matchRow">
                         <span>{rowIndex + 1}. {rowText}</span>
-                        <input
-                          value={answerFor(task.id, rowId)}
-                          onChange={(event) => setAnswer(task.id, rowId, event.target.value.toUpperCase())}
-                          placeholder="A"
-                        />
-                        {evidenceChoices.length > 0 ? (
-                          <select
-                            value={answerFor(task.id, `evidence::${rowId}`)}
-                            onChange={(event) =>
-                              setAnswer(task.id, `evidence::${rowId}`, event.target.value)
-                            }
-                          >
-                            <option value="">Pierādījums</option>
-                            {evidenceChoices.map((choice) => (
-                              <option value={choice} key={`${rowId}-${choice}`}>
-                                {choice}
-                              </option>
-                            ))}
-                          </select>
-                        ) : null}
+                        <select
+                          value={selectedChoice}
+                          onChange={(event) => {
+                            const nextValue = event.target.value;
+                            setAnswer(task.id, rowId, nextValue);
+                            setAnswer(task.id, `evidence::${rowId}`, nextValue);
+                          }}
+                          disabled={evidenceChoices.length === 0}
+                        >
+                          <option value="">
+                            {evidenceChoices.length > 0 ? "Izvēlies" : "Nav izvēļu"}
+                          </option>
+                          {evidenceChoices.map((choice) => (
+                            <option value={choice} key={`${rowId}-${choice}`}>
+                              {choice}
+                            </option>
+                          ))}
+                        </select>
                       </li>
                     );
                   })}
@@ -854,9 +1129,12 @@ export function ExamRunner({ tasksBySkill }: { tasksBySkill: GroupedTasks }) {
               const prompt = String(question.promptLv ?? question.stemLv ?? `Jautājums ${idx + 1}`);
               return (
                 <li key={qid} className="questionItem">
-                  <p className="questionStem">
-                    {idx + 1}. {prompt}
-                  </p>
+                  <div className="questionStemRow">
+                    <p className="questionStem">
+                      {idx + 1}. {prompt}
+                    </p>
+                    {renderPromptAudioControl(qid, prompt)}
+                  </div>
                   <textarea
                     className="linedAnswer"
                     value={answerFor(task.id, qid)}
@@ -895,9 +1173,12 @@ export function ExamRunner({ tasksBySkill }: { tasksBySkill: GroupedTasks }) {
             const followUp = String(question.followUp ?? "");
             return (
               <article key={qid} className="taskImageRow">
-                <p className="questionStem">
-                  {idx + 1}. Aplūko attēlu un atbildi: KAS? KO DARA? KUR?
-                </p>
+                <div className="questionStemRow">
+                  <p className="questionStem">
+                    {idx + 1}. Aplūko attēlu un atbildi: KAS? KO DARA? KUR?
+                  </p>
+                  {renderPromptAudioControl(qid, followUp ? `Aplūko attēlu un atbildi: KAS? KO DARA? KUR? ${followUp}` : "Aplūko attēlu un atbildi: KAS? KO DARA? KUR?")}
+                </div>
                 {imageUrl ? (
                   <figure className="taskImageWrap">
                     <img src={imageUrl} alt={hint} className="taskImage" />
@@ -945,6 +1226,9 @@ export function ExamRunner({ tasksBySkill }: { tasksBySkill: GroupedTasks }) {
                   <div className="adPrompt">
                     <strong>{idx + 1}. {adText}</strong>
                     <p style={{ margin: "0.3rem 0 0" }}>Uzdod jautājumu par: {target}</p>
+                    <div style={{ marginTop: "0.45rem" }}>
+                      {renderPromptAudioControl(qid, `${adText}. Uzdod jautājumu par: ${target}`)}
+                    </div>
                   </div>
                   <input
                     value={answerFor(task.id, qid)}

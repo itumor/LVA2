@@ -7,6 +7,14 @@
 ## 2) Start the app
 From project folder:
 
+One-time Latvian TTS model download:
+```bash
+mkdir -p tts-models
+curl -L -o tts-models/lv_LV-aivars-medium.onnx https://huggingface.co/rhasspy/piper-voices/resolve/main/lv/lv_LV/aivars/medium/lv_LV-aivars-medium.onnx
+curl -L -o tts-models/lv_LV-aivars-medium.onnx.json https://huggingface.co/rhasspy/piper-voices/resolve/main/lv/lv_LV/aivars/medium/lv_LV-aivars-medium.onnx.json
+```
+
+Then start services:
 ```bash
 docker compose up -d --build
 ```
@@ -21,6 +29,7 @@ You should see:
 - `vvpp-web` (healthy)
 - `vvpp-db` (healthy)
 - `vvpp-minio` (up)
+- `vvpp-tts` (healthy)
 
 ## 3) Stop the app
 ```bash
@@ -37,6 +46,7 @@ docker compose down
 - `/review`: spaced repetition queue from mistakes
 - `/analytics`: scores by skill/type + recent attempts
 - `/settings`: LV/EN language toggle and replay preference UI
+  - Includes **TTS Model Lab**: choose installed local model, set rate, benchmark prompts, and rate outputs.
 
 ## 5) Typical workflow
 1. Open dashboard and click **Start Full Exam** (opens `/exam` mode selector) or a trainer.
@@ -73,6 +83,7 @@ Seed dataset now enforces:
 
 ## 9) Quick health checks
 - API health: `http://localhost:3000/api/health`
+- TTS sidecar health: `http://localhost:5001/health`
 - Content API example: `http://localhost:3000/api/content/tasks?skill=listening`
 
 ## 10) Local dev checks

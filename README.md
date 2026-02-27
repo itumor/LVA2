@@ -25,6 +25,14 @@ Local-first web app for Latvian VVPP A2 exam simulation and adaptive practice.
 - Bilingual LV/EN UI toggle persisted in browser
 
 ## Local Run (Docker)
+One-time local Latvian TTS model setup:
+```bash
+mkdir -p tts-models
+curl -L -o tts-models/lv_LV-aivars-medium.onnx https://huggingface.co/rhasspy/piper-voices/resolve/main/lv/lv_LV/aivars/medium/lv_LV-aivars-medium.onnx
+curl -L -o tts-models/lv_LV-aivars-medium.onnx.json https://huggingface.co/rhasspy/piper-voices/resolve/main/lv/lv_LV/aivars/medium/lv_LV-aivars-medium.onnx.json
+```
+
+Start all services:
 ```bash
 docker compose up -d --build
 ```
@@ -32,6 +40,7 @@ docker compose up -d --build
 App URLs:
 - App: `http://localhost:3000`
 - Health: `http://localhost:3000/api/health`
+- TTS sidecar health: `http://localhost:5001/health` (internal container URL is `http://tts:5001/health`)
 - MinIO API: `http://localhost:9000`
 - MinIO Console: `http://localhost:9001`
 
@@ -85,6 +94,13 @@ npm run build
 - `GET /api/daily-plan`
 - `POST /api/review/:cardId/grade`
 - `POST /api/audio/upload`
+- `POST /api/tts/synthesize`
+- `GET /api/tts/models`
+- `GET /api/tts/config`
+- `PUT /api/tts/config`
+- `POST /api/tts/benchmark/run`
+- `POST /api/tts/benchmark/rate`
+- `GET /api/tts/benchmark/summary`
 - `GET /api/analytics/summary`
 - `GET /api/content/tasks?skill=&topic=&type=`
 
@@ -99,4 +115,6 @@ scripts/restore.sh backups/db-<timestamp>.sql
 - Uploaded recordings are stored in bucket `vvpp-recordings`.
 - The provided `a_2_limenis_audio.mp3` and `a_2_limenis.pdf` are available under `public/media/`.
 - New migration for exam fidelity v1: `prisma/migrations/20260223223500_exam_fidelity_v1/migration.sql`.
+- Local prompt TTS uses Piper via Docker sidecar and caches generated `.wav` files under `public/tts-cache/`.
+- Settings now includes a TTS Model Lab for local model switching, benchmark runs, ratings, and leaderboard ranking.
 # LVA2

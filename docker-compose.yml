@@ -1,4 +1,27 @@
 services:
+  tts:
+    build:
+      context: .
+      dockerfile: tts-service/Dockerfile
+    container_name: vvpp-tts
+    environment:
+      PIPER_MODEL_DIR: /models
+      PIPER_DEFAULT_VOICE: ${TTS_DEFAULT_VOICE:-lv_LV-aivars-medium}
+    volumes:
+      - ./tts-models:/models
+      - tts_cache:/cache
+    ports:
+      - "5001:5001"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:5001/health', timeout=5)\"",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+
   db:
     image: postgres:16-alpine
     container_name: vvpp-db
@@ -48,6 +71,8 @@ services:
       dockerfile: Dockerfile
     container_name: vvpp-web
     depends_on:
+      tts:
+        condition: service_healthy
       db:
         condition: service_healthy
       minio-init:
@@ -64,8 +89,18 @@ services:
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_EVALUATOR_MODEL: ${OPENAI_EVALUATOR_MODEL:-gpt-4o-mini}
+      TTS_ENABLED: ${TTS_ENABLED:-true}
+      TTS_PROVIDER: ${TTS_PROVIDER:-piper}
+      TTS_PIPER_BASE_URL: ${TTS_PIPER_BASE_URL:-http://tts:5001}
+      TTS_DEFAULT_VOICE: ${TTS_DEFAULT_VOICE:-lv_LV-aivars-medium}
+      TTS_CACHE_DIR: ${TTS_CACHE_DIR:-/app/public/tts-cache}
+      TTS_MAX_TEXT_CHARS: ${TTS_MAX_TEXT_CHARS:-500}
+      TTS_MODEL_DIR: ${TTS_MODEL_DIR:-/models}
     ports:
       - "3000:3000"
+    volumes:
+      - tts_cache:/app/public/tts-cache
+      - ./tts-models:/models:ro
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:3000/api/health >/dev/null"]
       interval: 10s
@@ -75,3 +110,4 @@ services:
 volumes:
   pg_data:
   minio_data:
+  tts_cache:
