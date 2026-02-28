@@ -12,6 +12,7 @@
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate deploy",
     "db:seed": "tsx prisma/seed.ts",
+    "db:import:vvpp": "tsx scripts/import-vvpp-a2.ts",
     "db:push": "prisma db push",
     "seed:validate": "tsx scripts/validate-seed.ts"
   },

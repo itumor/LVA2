@@ -2,6 +2,12 @@
 
 import { useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from "react";
 import { useSearchParams } from "next/navigation";
+import {
+  ensureGeneratedImage,
+  ensureListeningAudio,
+  resolveLegacyImageFromQuestion,
+  resolveStaticListeningAudio,
+} from "@/lib/local-assets-client";
 import { getClientTtsConfig } from "@/lib/tts-client";
 
 type Question = Record<string, unknown>;
@@ -15,6 +21,7 @@ type TrainerTask = {
   promptEn: string;
   audioRef?: string | null;
   transcript?: string | null;
+  metadata?: unknown;
   points: number;
   questions: Question[];
 };
@@ -98,34 +105,6 @@ const fillBlankDistractorsByTaskId: Record<string, string[]> = {
   listen_short_dialog_fill_001: ["veikala", "autobusu", "54", "23.10"],
 };
 
-function imageFromQuestion(question: Question, questionId: string) {
-  const explicit = typeof question.imageUrl === "string" ? question.imageUrl : null;
-  if (explicit) {
-    const legacyMap: Record<string, string> = {
-      "/images/writing-q1.svg": "/images/writing-q1.jpg",
-      "/images/writing-q2.svg": "/images/writing-q2.jpg",
-      "/images/writing-q3.svg": "/images/writing-q3.jpg",
-      "/images/writing-q4.svg": "/images/writing-q4.jpg",
-      "/images/speaking-q1.svg": "/images/speaking-q1.jpg",
-      "/images/speaking-q2.svg": "/images/speaking-q2.jpg",
-    };
-    return legacyMap[explicit] ?? explicit;
-  }
-  const hint = typeof question.imageHint === "string" ? question.imageHint.toLowerCase() : "";
-
-  if (hint.includes("park")) return "/images/speaking-q1.jpg";
-  if (hint.includes("kafejn")) return "/images/speaking-q2.jpg";
-
-  const fallbackMap: Record<string, string> = {
-    q1: "/images/writing-q1.jpg",
-    q2: "/images/writing-q2.jpg",
-    q3: "/images/writing-q3.jpg",
-    q4: "/images/writing-q4.jpg",
-  };
-
-  return fallbackMap[questionId] ?? null;
-}
-
 function renderStemWithBlank(stem: string, input: ReactNode) {
   const parts = stem.split("____");
   if (parts.length === 1) {
@@ -198,6 +177,10 @@ export function TrainerWorkspace({
   const [speakingQuestionId, setSpeakingQuestionId] = useState<string | null>(null);
   const [speechInterimText, setSpeechInterimText] = useState("");
   const [speechError, setSpeechError] = useState<string | null>(null);
+  const [generatedListeningAudio, setGeneratedListeningAudio] = useState<Record<string, string>>({});
+  const [generatedListeningWarnings, setGeneratedListeningWarnings] = useState<Record<string, string>>({});
+  const [generatedQuestionImages, setGeneratedQuestionImages] = useState<Record<string, string>>({});
+  const [generatedImageWarnings, setGeneratedImageWarnings] = useState<Record<string, string>>({});
   const speechRecognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const promptUtteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
   const promptAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -205,11 +188,10 @@ export function TrainerWorkspace({
 
   const task = tasks[taskIndex];
 
-  const audioSrc = useMemo(() => {
-    if (!task?.audioRef) return null;
-    if (task.audioRef.includes("a_2_limenis_audio.mp3")) return "/media/a_2_limenis_audio.mp3";
-    return null;
-  }, [task?.audioRef]);
+  const audioSrc = useMemo(
+    () => generatedListeningAudio[task.id] ?? resolveStaticListeningAudio(task),
+    [generatedListeningAudio, task],
+  );
 
   const fillBlankQuestionIds = useMemo(() => {
     if (task.taskType !== "FILL_BLANK") return [];
@@ -262,6 +244,74 @@ export function TrainerWorkspace({
       promptUtteranceRef.current = null;
     };
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function generateListeningAudio() {
+      if (task.skill !== "LISTENING") return;
+      const result = await ensureListeningAudio(task);
+      if (cancelled) return;
+
+      const audioUrl = result.audioUrl;
+      if (audioUrl) {
+        setGeneratedListeningAudio((prev) =>
+          prev[task.id] === audioUrl ? prev : { ...prev, [task.id]: audioUrl },
+        );
+      }
+
+      if (result.warning) {
+        setGeneratedListeningWarnings((prev) => ({ ...prev, [task.id]: result.warning as string }));
+      }
+    }
+
+    void generateListeningAudio();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [task]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function generateTaskImages() {
+      if (
+        !((task.skill === "WRITING" && task.taskType === "PICTURE_SENTENCE") ||
+          (task.skill === "SPEAKING" && task.taskType === "IMAGE_DESCRIPTION"))
+      ) {
+        return;
+      }
+
+      for (const [index, question] of task.questions.entries()) {
+        const questionId = String(question.id ?? `q${index + 1}`);
+        const result = await ensureGeneratedImage({
+          task,
+          question,
+          questionId,
+        });
+
+        if (cancelled) return;
+
+        const key = `${task.id}::${questionId}`;
+        const imageUrl = result.imageUrl;
+        if (imageUrl) {
+          setGeneratedQuestionImages((prev) =>
+            prev[key] === imageUrl ? prev : { ...prev, [key]: imageUrl },
+          );
+        }
+        if (result.warning) {
+          setGeneratedImageWarnings((prev) => ({ ...prev, [key]: result.warning as string }));
+        }
+      }
+    }
+
+    void generateTaskImages();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [task]);
 
   if (!task) {
     return (
@@ -877,7 +927,9 @@ export function TrainerWorkspace({
         <div className="questionGroup">
           {task.questions.map((question, idx) => {
             const questionId = String(question.id ?? `q${idx + 1}`);
-            const imageSrc = imageFromQuestion(question, questionId);
+            const imageKey = `${task.id}::${questionId}`;
+            const imageSrc =
+              generatedQuestionImages[imageKey] ?? resolveLegacyImageFromQuestion(question, questionId);
             const imageHint = typeof question.imageHint === "string" ? question.imageHint : null;
             const minWords = Number(question.minWords ?? 5);
 
@@ -891,6 +943,9 @@ export function TrainerWorkspace({
                     <img src={imageSrc} alt={imageHint ?? `Attēls ${questionId}`} className="taskImage" />
                     {imageHint ? <figcaption>{imageHint}</figcaption> : null}
                   </figure>
+                ) : null}
+                {generatedImageWarnings[imageKey] ? (
+                  <small style={{ color: "var(--ink-soft)" }}>{generatedImageWarnings[imageKey]}</small>
                 ) : null}
                 <textarea
                   className="linedAnswer"
@@ -992,7 +1047,9 @@ export function TrainerWorkspace({
         <div className="questionGroup">
           {task.questions.map((question, idx) => {
             const questionId = String(question.id ?? `q${idx + 1}`);
-            const imageSrc = imageFromQuestion(question, questionId);
+            const imageKey = `${task.id}::${questionId}`;
+            const imageSrc =
+              generatedQuestionImages[imageKey] ?? resolveLegacyImageFromQuestion(question, questionId);
             const imageHint = typeof question.imageHint === "string" ? question.imageHint : null;
             const followUp = typeof question.followUp === "string" ? question.followUp : null;
             const prompt = "Aplūko attēlu un atbildi: KAS? KO DARA? KUR?";
@@ -1010,6 +1067,9 @@ export function TrainerWorkspace({
                     <img src={imageSrc} alt={imageHint ?? `Attēls ${questionId}`} className="taskImage" />
                     {imageHint ? <figcaption>{imageHint}</figcaption> : null}
                   </figure>
+                ) : null}
+                {generatedImageWarnings[imageKey] ? (
+                  <small style={{ color: "var(--ink-soft)" }}>{generatedImageWarnings[imageKey]}</small>
                 ) : null}
                 {followUp ? <p style={{ margin: 0 }}>{followUp}</p> : null}
                 <textarea
@@ -1126,6 +1186,9 @@ export function TrainerWorkspace({
               style={{ width: "100%" }}
             />
             <small style={{ color: "var(--ink-soft)" }}>Atskaņots: {playCount} reizes</small>
+            {generatedListeningWarnings[task.id] ? (
+              <p style={{ marginTop: "0.4rem", color: "var(--ink-soft)" }}>{generatedListeningWarnings[task.id]}</p>
+            ) : null}
           </div>
         ) : null}
       </article>

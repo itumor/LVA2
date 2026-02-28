@@ -1,6 +1,96 @@
 import { DEFAULT_LEARNER_ID } from "@/lib/constants";
 import { buildDailyPlan } from "@/lib/daily-plan";
 import { prisma } from "@/lib/prisma";
+import { Skill } from "@prisma/client";
+
+export const DEFAULT_EXAM_DATASET_ID = "seed-default";
+
+export type ExamDatasetOption = {
+  examId: string;
+  versionLabel: string;
+  taskCount: number;
+  hasGeneratedMetadata: boolean;
+};
+
+function readExamId(metadata: unknown): string | null {
+  if (!metadata || typeof metadata !== "object") return null;
+  const value = (metadata as Record<string, unknown>).examId;
+  return typeof value === "string" && value.trim().length > 0 ? value : null;
+}
+
+function readVersionLabel(metadata: unknown): string | null {
+  if (!metadata || typeof metadata !== "object") return null;
+  const value = (metadata as Record<string, unknown>).versionLabel;
+  return typeof value === "string" && value.trim().length > 0 ? value : null;
+}
+
+function pickDefaultExamId(options: ExamDatasetOption[]): string {
+  const generated = options.filter((row) => row.hasGeneratedMetadata);
+  if (generated.length > 0) {
+    return [...generated].sort((a, b) => b.examId.localeCompare(a.examId))[0].examId;
+  }
+  return options[0]?.examId ?? DEFAULT_EXAM_DATASET_ID;
+}
+
+export function resolveSelectedExamId(options: ExamDatasetOption[], requestedExamId?: string): string {
+  if (requestedExamId && options.some((row) => row.examId === requestedExamId)) {
+    return requestedExamId;
+  }
+  return pickDefaultExamId(options);
+}
+
+export async function getExamDatasetOptions(): Promise<ExamDatasetOption[]> {
+  const tasks = await prisma.taskItem.findMany({
+    select: {
+      id: true,
+      metadata: true,
+    },
+    orderBy: { id: "asc" },
+  });
+
+  const map = new Map<string, ExamDatasetOption>();
+
+  for (const task of tasks) {
+    const examId = readExamId(task.metadata) ?? DEFAULT_EXAM_DATASET_ID;
+    const versionLabel = readVersionLabel(task.metadata) ?? "Seed Default";
+    const hasGeneratedMetadata = examId !== DEFAULT_EXAM_DATASET_ID;
+    const prev = map.get(examId);
+
+    if (prev) {
+      prev.taskCount += 1;
+      if (prev.versionLabel === "Seed Default" && versionLabel !== "Seed Default") {
+        prev.versionLabel = versionLabel;
+      }
+      continue;
+    }
+
+    map.set(examId, {
+      examId,
+      versionLabel,
+      taskCount: 1,
+      hasGeneratedMetadata,
+    });
+  }
+
+  return [...map.values()].sort((a, b) => {
+    if (a.hasGeneratedMetadata !== b.hasGeneratedMetadata) {
+      return a.hasGeneratedMetadata ? -1 : 1;
+    }
+    return b.examId.localeCompare(a.examId);
+  });
+}
+
+export async function getExamTasksByDataset(examId: string) {
+  const tasks = await prisma.taskItem.findMany({
+    orderBy: [{ skill: "asc" }, { id: "asc" }],
+  });
+
+  if (examId === DEFAULT_EXAM_DATASET_ID) {
+    return tasks.filter((task) => !readExamId(task.metadata));
+  }
+
+  return tasks.filter((task) => readExamId(task.metadata) === examId);
+}
 
 export async function getDashboardSnapshot() {
   const [attempts, recentSessions, dailyPlan] = await Promise.all([
@@ -55,11 +145,21 @@ export async function getDashboardSnapshot() {
   };
 }
 
-export async function getTrainerDataBySkill(skill: "LISTENING" | "READING" | "WRITING" | "SPEAKING") {
-  return prisma.taskItem.findMany({
-    where: { skill },
+export async function getTrainerDataBySkill(
+  skill: "LISTENING" | "READING" | "WRITING" | "SPEAKING",
+  examId?: string,
+) {
+  const tasks = await prisma.taskItem.findMany({
+    where: { skill: skill as Skill },
     orderBy: { id: "asc" },
   });
+
+  if (!examId) return tasks;
+  if (examId === DEFAULT_EXAM_DATASET_ID) {
+    return tasks.filter((task) => !readExamId(task.metadata));
+  }
+
+  return tasks.filter((task) => readExamId(task.metadata) === examId);
 }
 
 export async function getReviewCards() {

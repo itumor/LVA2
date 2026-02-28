@@ -16,6 +16,7 @@ const nav = [
   { href: "/trainer/speaking", labelKey: "speaking" as const },
   { href: "/review", labelKey: "review" as const },
   { href: "/analytics", labelKey: "analytics" as const },
+  { href: "/generator", labelKey: "generator" as const },
   { href: "/settings", labelKey: "settings" as const },
 ];
 

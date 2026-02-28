@@ -3,6 +3,12 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import {
+  ensureGeneratedImage,
+  ensureListeningAudio,
+  resolveLegacyImageFromQuestion,
+  resolveStaticListeningAudio,
+} from "@/lib/local-assets-client";
 import { getClientTtsConfig } from "@/lib/tts-client";
 
 const sectionOrder = ["LISTENING", "READING", "WRITING", "SPEAKING"] as const;
@@ -72,6 +78,7 @@ type ExamTask = {
   promptEn?: string;
   audioRef?: string | null;
   transcript?: string | null;
+  metadata?: unknown;
   points: number;
   questions: Array<Record<string, unknown>>;
 };
@@ -145,6 +152,8 @@ type SpeechWindow = Window & {
   webkitSpeechRecognition?: new () => SpeechRecognitionLike;
 };
 
+const EMPTY_TASKS: ExamTask[] = [];
+
 function toSeconds(deadlineIso: string | null, fallbackMinutes: number) {
   if (!deadlineIso) return fallbackMinutes * 60;
   const diff = new Date(deadlineIso).getTime() - Date.now();
@@ -200,14 +209,22 @@ export function ExamRunner({ tasksBySkill }: { tasksBySkill: GroupedTasks }) {
   const [selectedWord, setSelectedWord] = useState<string | null>(null);
   const [draggingWord, setDraggingWord] = useState<string | null>(null);
   const [promptAudioSupported, setPromptAudioSupported] = useState(false);
+  const [generatedListeningAudio, setGeneratedListeningAudio] = useState<Record<string, string>>({});
+  const [generatedListeningWarnings, setGeneratedListeningWarnings] = useState<Record<string, string>>({});
+  const [generatedQuestionImages, setGeneratedQuestionImages] = useState<Record<string, string>>({});
+  const [generatedImageWarnings, setGeneratedImageWarnings] = useState<Record<string, string>>({});
   const speechRecognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const promptAudioUtteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
   const promptAudioRef = useRef<HTMLAudioElement | null>(null);
   const promptAudioAbortRef = useRef<AbortController | null>(null);
 
   const activeSkill = sectionOrder[activeSectionIndex];
-  const sectionTasks = tasksBySkill[activeSkill] ?? [];
+  const sectionTasks = useMemo(() => tasksBySkill[activeSkill] ?? EMPTY_TASKS, [tasksBySkill, activeSkill]);
   const activeDeadline = sectionDeadlines[activeSkill] ?? null;
+  const sectionTaskSignature = useMemo(
+    () => sectionTasks.map((task) => task.id).join("|"),
+    [sectionTasks],
+  );
 
   useEffect(() => {
     if (!sessionId) return;
@@ -302,6 +319,77 @@ export function ExamRunner({ tasksBySkill }: { tasksBySkill: GroupedTasks }) {
     };
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    async function generateListeningAudioForSection() {
+      if (activeSkill !== "LISTENING") return;
+
+      for (const task of sectionTasks) {
+        const result = await ensureListeningAudio(task);
+        if (cancelled) return;
+
+        const audioUrl = result.audioUrl;
+        if (audioUrl) {
+          setGeneratedListeningAudio((prev) =>
+            prev[task.id] === audioUrl ? prev : { ...prev, [task.id]: audioUrl },
+          );
+        }
+
+        if (result.warning) {
+          setGeneratedListeningWarnings((prev) => ({ ...prev, [task.id]: result.warning as string }));
+        }
+      }
+    }
+
+    void generateListeningAudioForSection();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeSkill, sectionTaskSignature, sectionTasks]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function generateSectionImages() {
+      for (const task of sectionTasks) {
+        const shouldGenerate =
+          (task.skill === "WRITING" && task.taskType === "PICTURE_SENTENCE") ||
+          (task.skill === "SPEAKING" && task.taskType === "IMAGE_DESCRIPTION");
+        if (!shouldGenerate) continue;
+
+        for (const [index, question] of task.questions.entries()) {
+          const questionId = String(question.id ?? `q${index + 1}`);
+          const result = await ensureGeneratedImage({
+            task,
+            question,
+            questionId,
+          });
+
+          if (cancelled) return;
+
+          const key = `${task.id}::${questionId}`;
+          const imageUrl = result.imageUrl;
+          if (imageUrl) {
+            setGeneratedQuestionImages((prev) =>
+              prev[key] === imageUrl ? prev : { ...prev, [key]: imageUrl },
+            );
+          }
+          if (result.warning) {
+            setGeneratedImageWarnings((prev) => ({ ...prev, [key]: result.warning as string }));
+          }
+        }
+      }
+    }
+
+    void generateSectionImages();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [sectionTaskSignature, sectionTasks]);
+
   const displayTimer = useMemo(() => {
     const min = Math.floor(remainingSec / 60)
       .toString()
@@ -377,9 +465,7 @@ export function ExamRunner({ tasksBySkill }: { tasksBySkill: GroupedTasks }) {
   }
 
   function audioForTask(task: ExamTask) {
-    if (!task.audioRef) return null;
-    if (task.audioRef.includes("a_2_limenis_audio.mp3")) return "/media/a_2_limenis_audio.mp3";
-    return null;
+    return generatedListeningAudio[task.id] ?? resolveStaticListeningAudio(task);
   }
 
   async function startExamSession(options?: { allowWhileBusy?: boolean }) {
@@ -1137,7 +1223,9 @@ export function ExamRunner({ tasksBySkill }: { tasksBySkill: GroupedTasks }) {
         <div className="questionGroup">
           {task.questions.map((question, idx) => {
             const qid = String(question.id ?? `q${idx + 1}`);
-            const imageUrl = typeof question.imageUrl === "string" ? question.imageUrl : null;
+            const imageKey = `${task.id}::${qid}`;
+            const imageUrl =
+              generatedQuestionImages[imageKey] ?? resolveLegacyImageFromQuestion(question, qid);
             const hint = String(question.imageHint ?? `Attēls ${idx + 1}`);
             const minWords = Number(question.minWords ?? 5);
             return (
@@ -1150,6 +1238,9 @@ export function ExamRunner({ tasksBySkill }: { tasksBySkill: GroupedTasks }) {
                     <img src={imageUrl} alt={hint} className="taskImage" />
                     <figcaption>{hint}</figcaption>
                   </figure>
+                ) : null}
+                {generatedImageWarnings[imageKey] ? (
+                  <small style={{ color: "var(--ink-soft)" }}>{generatedImageWarnings[imageKey]}</small>
                 ) : null}
                 <textarea
                   className="linedAnswer"
@@ -1320,7 +1411,9 @@ export function ExamRunner({ tasksBySkill }: { tasksBySkill: GroupedTasks }) {
         <div className="questionGroup">
           {task.questions.map((question, idx) => {
             const qid = String(question.id ?? `q${idx + 1}`);
-            const imageUrl = typeof question.imageUrl === "string" ? question.imageUrl : null;
+            const imageKey = `${task.id}::${qid}`;
+            const imageUrl =
+              generatedQuestionImages[imageKey] ?? resolveLegacyImageFromQuestion(question, qid);
             const hint = String(question.imageHint ?? "attēls");
             const followUp = String(question.followUp ?? "");
             return (
@@ -1336,6 +1429,9 @@ export function ExamRunner({ tasksBySkill }: { tasksBySkill: GroupedTasks }) {
                     <img src={imageUrl} alt={hint} className="taskImage" />
                     <figcaption>{hint}</figcaption>
                   </figure>
+                ) : null}
+                {generatedImageWarnings[imageKey] ? (
+                  <small style={{ color: "var(--ink-soft)" }}>{generatedImageWarnings[imageKey]}</small>
                 ) : null}
                 {followUp ? <p>{followUp}</p> : null}
                 {renderSpeechControl(task.id, qid)}
@@ -1543,6 +1639,9 @@ export function ExamRunner({ tasksBySkill }: { tasksBySkill: GroupedTasks }) {
                   ? `/${2} · atlikušas ${Math.max(0, playState[task.id]?.playsRemaining ?? 2)}`
                   : " · prakses režīmā atļauti papildu atskaņojumi"}
               </small>
+              {generatedListeningWarnings[task.id] ? (
+                <p style={{ marginTop: "0.4rem", color: "var(--ink-soft)" }}>{generatedListeningWarnings[task.id]}</p>
+              ) : null}
             </div>
           ) : null}
 

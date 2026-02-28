@@ -67,6 +67,12 @@ Optional:
   - `OPENAI_BASE_URL=http://192.168.0.198:1234` (or `http://127.0.0.1:1234`)
   - `OPENAI_EVALUATOR_MODEL=openai/gpt-oss-20b`
   - `OPENAI_API_KEY=local-ai` (many local servers accept any non-empty token)
+- Configure local OpenAI-compatible image generation:
+  - `LOCAL_IMAGE_MODEL=black-forest-labs/FLUX.1-schnell` (required for `/api/images/generate`)
+  - `LOCAL_IMAGE_BASE_URL=` (optional, defaults to `OPENAI_BASE_URL`)
+  - `LOCAL_IMAGE_API_KEY=` (optional, defaults to `OPENAI_API_KEY`)
+  - `LOCAL_IMAGE_SIZE=1024x1024`
+  - `LOCAL_IMAGE_OUTPUT_DIR=public/generated/images`
 
 ## Database + Seed
 - Prisma schema: `prisma/schema.prisma`
@@ -96,6 +102,7 @@ npm run build
 - `POST /api/review/:cardId/grade`
 - `POST /api/audio/upload`
 - `POST /api/tts/synthesize`
+- `POST /api/images/generate`
 - `GET /api/tts/models`
 - `GET /api/tts/config`
 - `PUT /api/tts/config`
@@ -116,6 +123,7 @@ scripts/restore.sh backups/db-<timestamp>.sql
 - Uploaded recordings are stored in bucket `vvpp-recordings`.
 - The provided `a_2_limenis_audio.mp3` and `a_2_limenis.pdf` are available under `public/media/`.
 - New migration for exam fidelity v1: `prisma/migrations/20260223223500_exam_fidelity_v1/migration.sql`.
-- Local prompt TTS uses Piper via Docker sidecar and caches generated `.wav` files under `public/tts-cache/`.
+- Listening/question TTS uses Piper via Docker sidecar and caches generated `.wav` files under `public/tts-cache/`.
+- Local generated writing/speaking images are cached under `public/generated/images/`.
 - Settings now includes a TTS Model Lab for local model switching, benchmark runs, ratings, and leaderboard ranking.
 # LVA2

@@ -1,12 +1,22 @@
+import { ExamDatasetSelector } from "@/components/ExamDatasetSelector";
 import { ExamRunner } from "@/components/ExamRunner";
-import { prisma } from "@/lib/prisma";
+import {
+  getExamDatasetOptions,
+  getExamTasksByDataset,
+  resolveSelectedExamId,
+} from "@/lib/queries";
 
 export const dynamic = "force-dynamic";
 
-export default async function ExamPage() {
-  const tasks = await prisma.taskItem.findMany({
-    orderBy: [{ skill: "asc" }, { id: "asc" }],
-  });
+type PageProps = {
+  searchParams?: Promise<{ examId?: string }>;
+};
+
+export default async function ExamPage({ searchParams }: PageProps) {
+  const params = (await searchParams) ?? {};
+  const options = await getExamDatasetOptions();
+  const selectedExamId = resolveSelectedExamId(options, params.examId);
+  const tasks = await getExamTasksByDataset(selectedExamId);
 
   const normalized = tasks
     .map((task) => ({
@@ -24,5 +34,10 @@ export default async function ExamPage() {
     return acc;
   }, {});
 
-  return <ExamRunner tasksBySkill={tasksBySkill} />;
+  return (
+    <div className="grid">
+      <ExamDatasetSelector basePath="/exam" selectedExamId={selectedExamId} options={options} />
+      <ExamRunner tasksBySkill={tasksBySkill} />
+    </div>
+  );
 }
