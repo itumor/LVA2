@@ -27,18 +27,25 @@ export async function transcribeWithActiveStt(file: File, override?: SttOverride
 
   let body = "";
   let lastError: unknown = null;
+  let providerError: string | null = null;
   for (const base of candidateBases) {
     try {
       const resp = await fetch(`${base}/transcribe`, { method: "POST", body: payload });
       body = await resp.text();
       if (!resp.ok) {
-        throw new Error(`STT provider error (${resp.status}) from ${base}: ${body}`);
+        providerError = `STT provider error (${resp.status}) from ${base}: ${body}`;
+        continue;
       }
       lastError = null;
+      providerError = null;
       break;
     } catch (error) {
       lastError = error;
     }
+  }
+
+  if (providerError) {
+    throw new Error(providerError);
   }
 
   if (lastError) {

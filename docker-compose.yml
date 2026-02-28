@@ -1,4 +1,27 @@
 services:
+  stt:
+    build:
+      context: .
+      dockerfile: stt-service/Dockerfile
+    container_name: vvpp-stt
+    environment:
+      STT_DEVICE: ${STT_DEVICE:-cpu}
+      STT_COMPUTE_TYPE: ${STT_COMPUTE_TYPE:-int8}
+      HF_HOME: /cache/hf
+    ports:
+      - "5003:5003"
+    volumes:
+      - stt_cache:/cache
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:5003/health', timeout=5)\"",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 30
+
   tts:
     build:
       context: .
@@ -73,6 +96,8 @@ services:
     depends_on:
       tts:
         condition: service_healthy
+      stt:
+        condition: service_healthy
       db:
         condition: service_healthy
       minio-init:
@@ -96,6 +121,7 @@ services:
       TTS_CACHE_DIR: ${TTS_CACHE_DIR:-/app/public/tts-cache}
       TTS_MAX_TEXT_CHARS: ${TTS_MAX_TEXT_CHARS:-500}
       TTS_MODEL_DIR: ${TTS_MODEL_DIR:-/models}
+      STT_BASE_URL: ${STT_BASE_URL:-http://stt:5003}
     ports:
       - "3000:3000"
     volumes:
@@ -111,3 +137,4 @@ volumes:
   pg_data:
   minio_data:
   tts_cache:
+  stt_cache:

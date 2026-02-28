@@ -41,6 +41,7 @@ App URLs:
 - App: `http://localhost:3000`
 - Health: `http://localhost:3000/api/health`
 - TTS sidecar health: `http://localhost:5001/health` (internal container URL is `http://tts:5001/health`)
+- STT sidecar health: `http://localhost:5003/health` (internal container URL is `http://stt:5003/health`)
 - MinIO API: `http://localhost:9000`
 - MinIO Console: `http://localhost:9001`
 
