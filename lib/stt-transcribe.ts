@@ -6,23 +6,46 @@ export type SttTranscriptionResult = {
   modelId: string;
 };
 
-export async function transcribeWithActiveStt(file: File) {
-  const active = await getActiveSttConfig();
+type SttOverride = {
+  provider: "whisper-ct2" | "whisper-transformers" | "whisper-cpp";
+  modelId: string;
+};
+
+export async function transcribeWithActiveStt(file: File, override?: SttOverride) {
+  const active = override ?? (await getActiveSttConfig());
   if (!active || active.provider === "browser") {
     throw new Error("Server STT is not active. Choose a Whisper provider in Settings.");
   }
 
-  const base = process.env.STT_BASE_URL?.trim() || "http://stt:5003";
+  const configuredBase = process.env.STT_BASE_URL?.trim();
+  const candidateBases = configuredBase ? [configuredBase] : ["http://stt:5003", "http://localhost:5003"];
   const payload = new FormData();
   payload.set("file", file);
   payload.set("provider", active.provider);
   payload.set("modelId", active.modelId);
   payload.set("language", "lv");
 
-  const resp = await fetch(`${base}/transcribe`, { method: "POST", body: payload });
-  const body = await resp.text();
-  if (!resp.ok) {
-    throw new Error(`STT provider error (${resp.status}): ${body}`);
+  let body = "";
+  let lastError: unknown = null;
+  for (const base of candidateBases) {
+    try {
+      const resp = await fetch(`${base}/transcribe`, { method: "POST", body: payload });
+      body = await resp.text();
+      if (!resp.ok) {
+        throw new Error(`STT provider error (${resp.status}) from ${base}: ${body}`);
+      }
+      lastError = null;
+      break;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  if (lastError) {
+    const targets = candidateBases.join(", ");
+    throw new Error(
+      `STT backend unreachable at ${targets}. Start STT service or set STT_BASE_URL. Last error: ${lastError instanceof Error ? lastError.message : "fetch failed"}`,
+    );
   }
 
   let parsed: unknown = null;

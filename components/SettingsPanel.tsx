@@ -164,6 +164,17 @@ export function SettingsPanel() {
     if (!found) setSelectedModelId(firstForProvider.id);
   }, [ttsModels, ttsProvider, selectedModelId]);
 
+  useEffect(() => {
+    if (sttProvider === "browser") {
+      if (sttModelId !== "browser") setSttModelId("browser");
+      return;
+    }
+    const firstForProvider = sttModels.find((m) => m.provider === sttProvider);
+    if (!firstForProvider) return;
+    const found = sttModels.find((m) => m.provider === sttProvider && m.id === sttModelId);
+    if (!found) setSttModelId(firstForProvider.id);
+  }, [sttModels, sttProvider, sttModelId]);
+
   const selectedPrompt = useMemo(() => promptPack.find((p) => p.id === selectedPromptId) ?? promptPack[0], [selectedPromptId]);
 
   async function saveTtsConfig(modelId: string, rate: number) {
@@ -186,18 +197,25 @@ export function SettingsPanel() {
     }
   }
 
+  async function persistSttConfig() {
+    const response = await fetch("/api/stt/config", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ provider: sttProvider, modelId: sttModelId || "browser" }),
+    });
+    const payload = await response.json();
+    if (!response.ok || !payload.ok) {
+      throw new Error(payload.error ?? "Could not save STT config");
+    }
+    return payload.data as { provider: string; modelId: string };
+  }
+
   async function saveSttConfig() {
     setBusy(true);
     setStatus(null);
     try {
-      const response = await fetch("/api/stt/config", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ provider: sttProvider, modelId: sttModelId || "browser" }),
-      });
-      const payload = await response.json();
-      if (!response.ok || !payload.ok) throw new Error(payload.error ?? "Could not save STT config");
-      setStatus(`STT config saved (${payload.data.provider}: ${payload.data.modelId}).`);
+      const saved = await persistSttConfig();
+      setStatus(`STT config saved (${saved.provider}: ${saved.modelId}).`);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Could not save STT config");
     } finally {
@@ -211,14 +229,21 @@ export function SettingsPanel() {
       setStatus("Please choose an audio file for STT benchmark.");
       return;
     }
+    if (sttProvider === "browser") {
+      setStatus("STT benchmark requires a server Whisper provider. Switch provider and save config.");
+      return;
+    }
 
     setBusy(true);
     setStatus(null);
     try {
+      await persistSttConfig();
       const form = new FormData();
       const fileName = sttRecordedBlob ? `stt-benchmark-${Date.now()}.webm` : (sttBenchmarkFile?.name ?? `stt-benchmark-${Date.now()}.webm`);
       form.set("file", sourceBlob, fileName);
       form.set("referenceText", sttReferenceText);
+      form.set("provider", sttProvider);
+      form.set("modelId", sttModelId);
 
       const response = await fetch("/api/stt/benchmark/run", {
         method: "POST",
@@ -494,7 +519,7 @@ export function SettingsPanel() {
                   value={sttReferenceText}
                   onChange={(e) => setSttReferenceText(e.target.value)}
                 />
-                <button className="primaryBtn" type="button" disabled={busy || (!sttBenchmarkFile && !sttRecordedBlob)} onClick={() => void runSttBenchmark()}>
+                <button className="primaryBtn" type="button" disabled={busy || sttProvider === "browser" || (!sttBenchmarkFile && !sttRecordedBlob)} onClick={() => void runSttBenchmark()}>
                   Run benchmark for active STT model
                 </button>
                 {sttBenchmarkResult ? (
