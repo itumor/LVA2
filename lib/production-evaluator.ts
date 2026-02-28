@@ -569,6 +569,15 @@ function resolveOpenAIChatCompletionsUrl(): string {
   }
 }
 
+function resolveEvaluatorModel(): string {
+  const configured = process.env.OPENAI_EVALUATOR_MODEL?.trim();
+  if (!configured) return "gpt-4o-mini";
+
+  // Accept accidental alias prefixes like "llm openai/gpt-oss-20b".
+  const parts = configured.split(/\s+/).filter(Boolean);
+  return parts[parts.length - 1] ?? "gpt-4o-mini";
+}
+
 function sanitizeStringArray(value: unknown, fallback: string[]): string[] {
   if (!Array.isArray(value)) return fallback;
   const items = value
@@ -667,9 +676,9 @@ async function evaluateWithOpenAI(
 
   if (!apiKey && usesOpenAIDefaultEndpoint) return null;
 
-  const model = process.env.OPENAI_EVALUATOR_MODEL ?? "gpt-4o-mini";
+  const model = resolveEvaluatorModel();
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 15000);
+  const timeoutId = setTimeout(() => controller.abort(), 60000);
 
   try {
     const promptPayload = {

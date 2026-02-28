@@ -117,6 +117,34 @@ type FinalResult = {
   }>;
 };
 
+type SpeechRecognitionLikeResult = {
+  isFinal: boolean;
+  [index: number]: {
+    transcript: string;
+  };
+};
+
+type SpeechRecognitionLikeEvent = {
+  resultIndex: number;
+  results: ArrayLike<SpeechRecognitionLikeResult>;
+};
+
+type SpeechRecognitionLike = {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  onresult: ((event: SpeechRecognitionLikeEvent) => void) | null;
+  onerror: ((event: { error?: string }) => void) | null;
+  onend: (() => void) | null;
+  start: () => void;
+  stop: () => void;
+};
+
+type SpeechWindow = Window & {
+  SpeechRecognition?: new () => SpeechRecognitionLike;
+  webkitSpeechRecognition?: new () => SpeechRecognitionLike;
+};
+
 function toSeconds(deadlineIso: string | null, fallbackMinutes: number) {
   if (!deadlineIso) return fallbackMinutes * 60;
   const diff = new Date(deadlineIso).getTime() - Date.now();
@@ -165,9 +193,14 @@ export function ExamRunner({ tasksBySkill }: { tasksBySkill: GroupedTasks }) {
   const [sectionSummary, setSectionSummary] = useState<SectionSummary | null>(null);
   const [finalResult, setFinalResult] = useState<FinalResult | null>(null);
   const [speakingQuestionId, setSpeakingQuestionId] = useState<string | null>(null);
+  const [speechSupported, setSpeechSupported] = useState(false);
+  const [speechError, setSpeechError] = useState<string | null>(null);
+  const [speechTargetAnswerKey, setSpeechTargetAnswerKey] = useState<string | null>(null);
+  const [speechInterimText, setSpeechInterimText] = useState("");
   const [selectedWord, setSelectedWord] = useState<string | null>(null);
   const [draggingWord, setDraggingWord] = useState<string | null>(null);
   const [promptAudioSupported, setPromptAudioSupported] = useState(false);
+  const speechRecognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const promptAudioUtteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
   const promptAudioRef = useRef<HTMLAudioElement | null>(null);
   const promptAudioAbortRef = useRef<AbortController | null>(null);
@@ -246,11 +279,17 @@ export function ExamRunner({ tasksBySkill }: { tasksBySkill: GroupedTasks }) {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
+    const speechWindow = window as SpeechWindow;
+    setSpeechSupported(Boolean(speechWindow.SpeechRecognition || speechWindow.webkitSpeechRecognition));
     setPromptAudioSupported("speechSynthesis" in window && typeof SpeechSynthesisUtterance !== "undefined");
   }, []);
 
   useEffect(() => {
     return () => {
+      if (speechRecognitionRef.current) {
+        speechRecognitionRef.current.stop();
+        speechRecognitionRef.current = null;
+      }
       promptAudioAbortRef.current?.abort();
       promptAudioAbortRef.current = null;
       if (promptAudioRef.current) {
@@ -547,6 +586,8 @@ export function ExamRunner({ tasksBySkill }: { tasksBySkill: GroupedTasks }) {
 
   function continueToNextSection() {
     if (activeSectionIndex + 1 >= sectionOrder.length) return;
+    stopSpeechRecognition();
+    stopPromptAudio();
     setActiveSectionIndex((prev) => prev + 1);
     setAnswers({});
     setPlayState({});
@@ -577,6 +618,89 @@ export function ExamRunner({ tasksBySkill }: { tasksBySkill: GroupedTasks }) {
     }
     promptAudioUtteranceRef.current = null;
     if (resetState) setSpeakingQuestionId(null);
+  }
+
+  function stopSpeechRecognition() {
+    if (speechRecognitionRef.current) {
+      speechRecognitionRef.current.stop();
+      speechRecognitionRef.current = null;
+    }
+    setSpeechTargetAnswerKey(null);
+    setSpeechInterimText("");
+  }
+
+  function appendSpeechText(taskId: string, questionId: string, snippet: string) {
+    setAnswers((prev) => {
+      const key = `${taskId}::${questionId}`;
+      const current = String(prev[key] ?? "");
+      const next = current ? `${current}${current.endsWith(" ") ? "" : " "}${snippet}` : snippet;
+      return { ...prev, [key]: next };
+    });
+  }
+
+  function startSpeechRecognition(taskId: string, questionId: string) {
+    if (typeof window === "undefined") return;
+
+    const speechWindow = window as SpeechWindow;
+    const SpeechRecognitionConstructor = speechWindow.SpeechRecognition ?? speechWindow.webkitSpeechRecognition;
+    if (!SpeechRecognitionConstructor) {
+      setSpeechError("Mic-to-text is unavailable in this browser. Please use Chrome or Edge.");
+      return;
+    }
+
+    const answerKey = `${taskId}::${questionId}`;
+    stopPromptAudio();
+    stopSpeechRecognition();
+    setSpeechError(null);
+    setSpeechInterimText("");
+    setSpeechTargetAnswerKey(answerKey);
+
+    const recognition = new SpeechRecognitionConstructor();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = "lv-LV";
+    recognition.onresult = (event) => {
+      let interimTranscript = "";
+      let finalTranscript = "";
+
+      for (let idx = event.resultIndex; idx < event.results.length; idx += 1) {
+        const result = event.results[idx];
+        const transcript = result[0]?.transcript?.trim();
+        if (!transcript) continue;
+        if (result.isFinal) {
+          finalTranscript += `${transcript} `;
+        } else {
+          interimTranscript += `${transcript} `;
+        }
+      }
+
+      if (finalTranscript.trim()) {
+        appendSpeechText(taskId, questionId, finalTranscript.trim());
+      }
+      setSpeechInterimText(interimTranscript.trim());
+    };
+    recognition.onerror = (event) => {
+      setSpeechError(event.error ? `Speech recognition error: ${event.error}.` : "Speech recognition failed.");
+      setSpeechTargetAnswerKey(null);
+      setSpeechInterimText("");
+    };
+    recognition.onend = () => {
+      if (speechRecognitionRef.current === recognition) {
+        speechRecognitionRef.current = null;
+      }
+      setSpeechTargetAnswerKey((current) => (current === answerKey ? null : current));
+      setSpeechInterimText("");
+    };
+
+    speechRecognitionRef.current = recognition;
+    try {
+      recognition.start();
+    } catch (error) {
+      speechRecognitionRef.current = null;
+      setSpeechTargetAnswerKey(null);
+      setSpeechInterimText("");
+      setSpeechError(error instanceof Error ? error.message : "Unable to start speech recognition.");
+    }
   }
 
   async function playPromptAudio(questionId: string, promptText: string) {
@@ -683,6 +807,33 @@ export function ExamRunner({ tasksBySkill }: { tasksBySkill: GroupedTasks }) {
       >
         {speaking ? "Stop question audio" : "Play question"}
       </button>
+    );
+  }
+
+  function renderSpeechControl(taskId: string, questionId: string) {
+    if (activeSkill !== "SPEAKING") return null;
+
+    const answerKey = `${taskId}::${questionId}`;
+    const listening = speechTargetAnswerKey === answerKey;
+    return (
+      <div className="speechTools">
+        <button
+          type="button"
+          className={listening ? "secondaryBtn" : "primaryBtn"}
+          onClick={() => (listening ? stopSpeechRecognition() : startSpeechRecognition(taskId, questionId))}
+          disabled={!speechSupported}
+        >
+          {listening ? "Stop mic" : "Speak answer"}
+        </button>
+        <p className="speechHint">
+          {speechSupported
+            ? listening
+              ? "Listening... speak naturally, text will appear below."
+              : "Use mic to convert your voice to text."
+            : "Mic-to-text is unavailable in this browser. Please use Chrome or Edge."}
+        </p>
+        {listening && speechInterimText ? <p className="speechInterim">{speechInterimText}</p> : null}
+      </div>
     );
   }
 
@@ -1135,6 +1286,7 @@ export function ExamRunner({ tasksBySkill }: { tasksBySkill: GroupedTasks }) {
                     </p>
                     {renderPromptAudioControl(qid, prompt)}
                   </div>
+                  {renderSpeechControl(task.id, qid)}
                   <textarea
                     className="linedAnswer"
                     value={answerFor(task.id, qid)}
@@ -1186,6 +1338,7 @@ export function ExamRunner({ tasksBySkill }: { tasksBySkill: GroupedTasks }) {
                   </figure>
                 ) : null}
                 {followUp ? <p>{followUp}</p> : null}
+                {renderSpeechControl(task.id, qid)}
                 <textarea
                   className="linedAnswer"
                   value={answerFor(task.id, qid)}
@@ -1236,6 +1389,7 @@ export function ExamRunner({ tasksBySkill }: { tasksBySkill: GroupedTasks }) {
                     placeholder="Uzdod jautājumu"
                     style={{ marginTop: "0.45rem" }}
                   />
+                  {renderSpeechControl(task.id, qid)}
                 </li>
               );
             })}
@@ -1393,6 +1547,8 @@ export function ExamRunner({ tasksBySkill }: { tasksBySkill: GroupedTasks }) {
           ) : null}
 
           {renderTaskBody(task)}
+
+          {activeSkill === "SPEAKING" && speechError ? <p className="speechHint">{speechError}</p> : null}
 
           {task.transcript && transcriptVisible(task.id) ? (
             <details style={{ marginTop: "0.9rem" }}>

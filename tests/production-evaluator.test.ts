@@ -5,6 +5,7 @@ describe("evaluateProductionTask", () => {
   const previousApiKey = process.env.OPENAI_API_KEY;
   const previousModel = process.env.OPENAI_EVALUATOR_MODEL;
   const previousBaseUrl = process.env.OPENAI_BASE_URL;
+  const previousFetch = global.fetch;
 
   beforeEach(() => {
     delete process.env.OPENAI_API_KEY;
@@ -30,6 +31,8 @@ describe("evaluateProductionTask", () => {
     } else {
       delete process.env.OPENAI_BASE_URL;
     }
+
+    global.fetch = previousFetch;
   });
 
   it("returns adaptive fallback scoring for writing without API key", async () => {
@@ -114,5 +117,61 @@ describe("evaluateProductionTask", () => {
     expect(evaluation?.corrections.length).toBe(2);
     expect(evaluation?.corrections[0]?.corrected).toBe("Rīgā");
     expect(evaluation?.score).toBeLessThan(5);
+  });
+
+  it("uses model id when OPENAI_EVALUATOR_MODEL contains alias prefix", async () => {
+    process.env.OPENAI_BASE_URL = "http://127.0.0.1:1234";
+    process.env.OPENAI_API_KEY = "local-ai";
+    process.env.OPENAI_EVALUATOR_MODEL = "llm openai/gpt-oss-20b";
+
+    let requestModel = "";
+    global.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const body = init?.body ? JSON.parse(String(init.body)) : {};
+      requestModel = String(body.model ?? "");
+
+      return new Response(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  overallScore: 6,
+                  rubric: {
+                    taskCompletion: 4,
+                    grammar: 4,
+                    vocabulary: 3,
+                    coherence: 4,
+                  },
+                  strengths: ["Task mostly complete"],
+                  improvements: ["Add more detail"],
+                  corrections: [],
+                  overallFeedback: "Solid answer.",
+                }),
+              },
+            },
+          ],
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    }) as typeof fetch;
+
+    const evaluation = await evaluateProductionTask({
+      task: {
+        id: "writing_message_advert_001",
+        skill: Skill.WRITING,
+        taskType: TaskType.MESSAGE_ADVERT,
+        points: 8,
+        promptLv: "Uzraksti ziņu par sludinājumu.",
+        promptEn: "Write a message about the advert.",
+        questions: [{ id: "q1", minWords: 35 }],
+      },
+      answers: {
+        q1: "Labdien! Mani interesē sludinājums. Vai varam sarunāt tikšanos sestdien?",
+      },
+    });
+
+    expect(evaluation).not.toBeNull();
+    expect(evaluation?.method).toBe("openai");
+    expect(requestModel).toBe("openai/gpt-oss-20b");
   });
 });
