@@ -10,10 +10,14 @@ import {
 } from "@/lib/constants";
 import { prisma } from "@/lib/prisma";
 import type { ExamTask, ExamVersion, VvppA2GeneratorOutput } from "@/lib/vvpp-a2-generator";
+import { generateImageWithCache } from "@/lib/local-image";
+import { getActiveTtsConfig } from "@/lib/tts-config";
+import { normalizeTtsText, synthesizeWithCache } from "@/lib/tts";
 
 type ImportOptions = {
   examId?: string;
   replaceExisting?: boolean;
+  preGenerateAssets?: boolean;
 };
 
 type ImportResult = {
@@ -21,10 +25,17 @@ type ImportResult = {
   versionLabel: string;
   importedTasks: number;
   replacedExisting: boolean;
+  assetStats?: {
+    generatedImages: number;
+    generatedAudio: number;
+    imageFailures: number;
+    audioFailures: number;
+  };
 };
 
 type BatchImportOptions = {
   replaceExisting?: boolean;
+  preGenerateAssets?: boolean;
 };
 
 type BatchImportItem = {
@@ -37,9 +48,15 @@ type BatchImportItemResult =
       ok: true;
       examId: string;
       versionLabel: string;
-      importedTasks: number;
-      replacedExisting: boolean;
-    }
+    importedTasks: number;
+    replacedExisting: boolean;
+    assetStats?: {
+      generatedImages: number;
+      generatedAudio: number;
+      imageFailures: number;
+      audioFailures: number;
+    };
+  }
   | {
       ok: false;
       error: string;
@@ -286,7 +303,7 @@ function mapTaskToSeed(exam: ExamVersion, skill: Skill, task: ExamTask): TaskSee
     promptEn: task.uiLabelEn || task.taskType,
     audioRef: null,
     transcript: typeof task.stimuli.transcriptLv === "string" ? String(task.stimuli.transcriptLv) : null,
-    questions,
+    questions: questions as TaskSeedInput["questions"],
     points: officialOrder === 10 ? 5 : Math.max(1, task.points),
     metadata: {
       officialPart: skill === "LISTENING" ? 1 : skill === "READING" ? 2 : skill === "WRITING" ? 3 : 4,
@@ -305,6 +322,121 @@ function mapTaskToSeed(exam: ExamVersion, skill: Skill, task: ExamTask): TaskSee
       stimuli: task.stimuli,
       answerKey: task.answerKey,
     },
+  };
+}
+
+function asObject(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" ? (value as Record<string, unknown>) : null;
+}
+
+function resolveListeningText(task: TaskSeedInput) {
+  if (typeof task.transcript === "string" && task.transcript.trim()) {
+    return normalizeTtsText(task.transcript);
+  }
+
+  const metadata = asObject(task.metadata);
+  const stimuli = asObject(metadata?.stimuli);
+  const transcript = typeof stimuli?.transcriptLv === "string" ? String(stimuli.transcriptLv) : "";
+  if (transcript.trim()) {
+    return normalizeTtsText(transcript);
+  }
+
+  const script = Array.isArray(stimuli?.audioScriptLv) ? stimuli.audioScriptLv : [];
+  const lines = script.map((line) => String(line ?? "").trim()).filter(Boolean);
+  if (lines.length > 0) {
+    return normalizeTtsText(lines.join(" "));
+  }
+
+  if (typeof task.promptLv === "string" && task.promptLv.trim()) {
+    return normalizeTtsText(task.promptLv);
+  }
+
+  return "";
+}
+
+function resolveImagePrompt(task: TaskSeedInput, question: Record<string, unknown>) {
+  if (task.taskType === "image_description") {
+    const base =
+      (typeof question.imageHint === "string" && question.imageHint.trim()) ||
+      (typeof question.promptLv === "string" && question.promptLv.trim()) ||
+      task.promptLv;
+    const followUp =
+      typeof question.followUp === "string" && question.followUp.trim() ? question.followUp.trim() : "";
+    return followUp ? `${base}. ${followUp}`.trim() : String(base).trim();
+  }
+
+  const writingPrompt =
+    (typeof question.imageHint === "string" && question.imageHint.trim()) ||
+    (typeof question.promptLv === "string" && question.promptLv.trim()) ||
+    task.promptLv;
+
+  return String(writingPrompt).trim();
+}
+
+async function preGenerateLocalAssets(tasks: TaskSeedInput[]) {
+  let generatedImages = 0;
+  let generatedAudio = 0;
+  let imageFailures = 0;
+  let audioFailures = 0;
+
+  const ttsConfig = await getActiveTtsConfig().catch(() => null);
+  const voice = ttsConfig?.modelId || process.env.TTS_DEFAULT_VOICE?.trim() || "lv_LV-aivars-medium";
+  const rate = ttsConfig?.rate ?? 1;
+
+  for (const task of tasks) {
+    if (task.skill === "listening") {
+      const text = resolveListeningText(task);
+      if (text) {
+        try {
+          const audio = await synthesizeWithCache({
+            text,
+            lang: "lv",
+            voice,
+            rate,
+          });
+          task.audioRef = audio.audioUrl;
+          const metadata = task.metadata as TaskSeedInput["metadata"] & Record<string, unknown>;
+          metadata.generatedAssets = {
+            ...(asObject(metadata.generatedAssets) ?? {}),
+            listeningAudioUrl: audio.audioUrl,
+          };
+          generatedAudio += 1;
+        } catch {
+          audioFailures += 1;
+        }
+      }
+    }
+
+    const shouldGenerateImages =
+      (task.skill === "writing" && task.taskType === "picture_sentence") ||
+      (task.skill === "speaking" && task.taskType === "image_description");
+
+    if (!shouldGenerateImages || !Array.isArray(task.questions)) continue;
+
+    for (let index = 0; index < task.questions.length; index += 1) {
+      const question = asObject(task.questions[index]);
+      if (!question) continue;
+
+      if (typeof question.imageUrl === "string" && question.imageUrl.trim()) continue;
+      const prompt = resolveImagePrompt(task, question);
+      if (!prompt) continue;
+
+      try {
+        const image = await generateImageWithCache({ prompt });
+        question.imageUrl = image.imageUrl;
+        task.questions[index] = question as unknown as TaskSeedInput["questions"][number];
+        generatedImages += 1;
+      } catch {
+        imageFailures += 1;
+      }
+    }
+  }
+
+  return {
+    generatedImages,
+    generatedAudio,
+    imageFailures,
+    audioFailures,
   };
 }
 
@@ -424,6 +556,8 @@ async function importExamWithOptionalReplace(
   }
 
   const tasks = convertExamToTaskSeeds(selectedExam);
+  const shouldPreGenerateAssets = options.preGenerateAssets ?? false;
+  const assetStats = shouldPreGenerateAssets ? await preGenerateLocalAssets(tasks) : undefined;
 
   await prisma.$transaction(async (tx) => {
     await upsertDefaultsTx(tx);
@@ -440,6 +574,7 @@ async function importExamWithOptionalReplace(
     versionLabel: selectedExam.versionLabel,
     importedTasks: tasks.length,
     replacedExisting: replaceExisting,
+    assetStats,
   };
 }
 
@@ -469,6 +604,7 @@ export async function importGeneratedExamsBatchToDb(
       const result = await importExamWithOptionalReplace(item.payload, {
         examId: item.examId,
         replaceExisting,
+        preGenerateAssets: options.preGenerateAssets ?? false,
         replaceInTransaction: false,
       });
       results.push({ ok: true, ...result });

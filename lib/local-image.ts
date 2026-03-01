@@ -43,7 +43,7 @@ function normalizePrompt(prompt: string) {
 }
 
 function resolveImageModel(input?: string) {
-  const model = input?.trim() || process.env.LOCAL_IMAGE_MODEL?.trim();
+  const model = input?.trim() || process.env.LOCAL_IMAGE_MODEL?.trim() || "x/z-image-turbo";
   if (!model) {
     throw new LocalImageError(
       "LOCAL_IMAGE_MODEL is required for local image generation.",
@@ -59,19 +59,27 @@ function resolveImageSize(input?: string) {
 }
 
 function resolveImageBaseUrl() {
-  const baseUrl = process.env.LOCAL_IMAGE_BASE_URL?.trim() || process.env.OPENAI_BASE_URL?.trim();
-  if (!baseUrl) {
-    throw new LocalImageError(
-      "LOCAL_IMAGE_BASE_URL or OPENAI_BASE_URL must be configured.",
-      "IMAGE_BASE_URL_MISSING",
-      500,
-    );
-  }
-  return baseUrl;
+  const explicit = process.env.LOCAL_IMAGE_BASE_URL?.trim();
+  if (explicit) return explicit;
+
+  const openAiCompat = process.env.OPENAI_BASE_URL?.trim();
+  if (openAiCompat) return openAiCompat;
+
+  // Ollama default local endpoint.
+  return "http://localhost:11434";
 }
 
 function resolveImageApiKey() {
   return process.env.LOCAL_IMAGE_API_KEY?.trim() || process.env.OPENAI_API_KEY?.trim() || "local-ai";
+}
+
+function resolveImageTimeoutMs() {
+  const raw = process.env.LOCAL_IMAGE_TIMEOUT_MS?.trim();
+  if (!raw) return 120000;
+
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) return 120000;
+  return parsed;
 }
 
 export function resolveImageOutputDir() {
@@ -79,7 +87,7 @@ export function resolveImageOutputDir() {
 }
 
 function resolveImageUrl(filePath: string) {
-  return `/generated/images/${path.basename(filePath)}`;
+  return `/api/images/file/${encodeURIComponent(path.basename(filePath))}`;
 }
 
 export function buildImageCacheKey(input: {
@@ -118,19 +126,43 @@ async function callOpenAICompatibleImage(input: {
   size: string;
 }): Promise<Uint8Array> {
   const endpoint = resolveOpenAICompatiblePath(resolveImageBaseUrl(), "images");
-  const response = await fetch(endpoint, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${resolveImageApiKey()}`,
-    },
-    body: JSON.stringify({
-      model: input.model,
-      prompt: normalizePrompt(input.prompt),
-      size: input.size,
-      response_format: "b64_json",
-    }),
-  });
+  const controller = new AbortController();
+  const timeoutMs = resolveImageTimeoutMs();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  let response: Response;
+  try {
+    response = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${resolveImageApiKey()}`,
+      },
+      body: JSON.stringify({
+        model: input.model,
+        prompt: normalizePrompt(input.prompt),
+        size: input.size,
+        response_format: "b64_json",
+      }),
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw new LocalImageError(
+        `Image generation timed out after ${timeoutMs} ms`,
+        "IMAGE_TIMEOUT",
+        504,
+      );
+    }
+
+    throw new LocalImageError(
+      error instanceof Error ? error.message : "Image generation request failed",
+      "IMAGE_REQUEST_FAILED",
+      502,
+    );
+  } finally {
+    clearTimeout(timeoutId);
+  }
 
   if (!response.ok) {
     const body = await response.text().catch(() => "");

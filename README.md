@@ -68,11 +68,17 @@ Optional:
   - `OPENAI_EVALUATOR_MODEL=openai/gpt-oss-20b`
   - `OPENAI_API_KEY=local-ai` (many local servers accept any non-empty token)
 - Configure local OpenAI-compatible image generation:
-  - `LOCAL_IMAGE_MODEL=black-forest-labs/FLUX.1-schnell` (required for `/api/images/generate`)
-  - `LOCAL_IMAGE_BASE_URL=` (optional, defaults to `OPENAI_BASE_URL`)
+  - `LOCAL_IMAGE_MODEL=x/z-image-turbo` (Ollama image model; defaults to this model)
+  - `LOCAL_IMAGE_BASE_URL=http://localhost:11434` (optional; defaults to `OPENAI_BASE_URL`, then Ollama default)
   - `LOCAL_IMAGE_API_KEY=` (optional, defaults to `OPENAI_API_KEY`)
   - `LOCAL_IMAGE_SIZE=1024x1024`
+  - `LOCAL_IMAGE_TIMEOUT_MS=120000` (optional; fail fast if local model is too slow)
   - `LOCAL_IMAGE_OUTPUT_DIR=public/generated/images`
+  - Ensure model is installed: `ollama pull x/z-image-turbo`
+
+Generator workflow:
+- Open `/generator`, generate exams, then import with `Pre-generate local audio/images` enabled.
+- This pre-builds listening audio (Piper) and writing/speaking images (Ollama), stores them in local cache, and trainer/exam reuses those URLs.
 
 ## Database + Seed
 - Prisma schema: `prisma/schema.prisma`

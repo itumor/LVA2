@@ -7,6 +7,7 @@ describe("POST /api/images/generate", () => {
   const originalFetch = global.fetch;
   const originalModel = process.env.LOCAL_IMAGE_MODEL;
   const originalBase = process.env.LOCAL_IMAGE_BASE_URL;
+  const originalOpenAiBase = process.env.OPENAI_BASE_URL;
   const originalApiKey = process.env.LOCAL_IMAGE_API_KEY;
   const originalOutputDir = process.env.LOCAL_IMAGE_OUTPUT_DIR;
 
@@ -28,6 +29,9 @@ describe("POST /api/images/generate", () => {
 
     if (originalBase === undefined) delete process.env.LOCAL_IMAGE_BASE_URL;
     else process.env.LOCAL_IMAGE_BASE_URL = originalBase;
+
+    if (originalOpenAiBase === undefined) delete process.env.OPENAI_BASE_URL;
+    else process.env.OPENAI_BASE_URL = originalOpenAiBase;
 
     if (originalApiKey === undefined) delete process.env.LOCAL_IMAGE_API_KEY;
     else process.env.LOCAL_IMAGE_API_KEY = originalApiKey;
@@ -102,8 +106,20 @@ describe("POST /api/images/generate", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it("returns clear error when LOCAL_IMAGE_MODEL is missing", async () => {
+  it("uses Ollama defaults when LOCAL_IMAGE_MODEL and LOCAL_IMAGE_BASE_URL are missing", async () => {
     delete process.env.LOCAL_IMAGE_MODEL;
+    delete process.env.LOCAL_IMAGE_BASE_URL;
+    delete process.env.OPENAI_BASE_URL;
+
+    const pngBytes = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]);
+    const b64 = Buffer.from(pngBytes).toString("base64");
+    const fetchMock = vi.fn(async () =>
+      new Response(JSON.stringify({ data: [{ b64_json: b64 }] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    global.fetch = fetchMock as typeof fetch;
 
     const { POST } = await import("@/app/api/images/generate/route");
     const response = await POST(
@@ -121,8 +137,12 @@ describe("POST /api/images/generate", () => {
     );
 
     const payload = await response.json();
-    expect(response.status).toBe(500);
-    expect(payload.ok).toBe(false);
-    expect(payload.code).toBe("IMAGE_MODEL_MISSING");
+    expect(response.status).toBe(200);
+    expect(payload.ok).toBe(true);
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:11434/v1/images/generations");
+    const body = JSON.parse(String(init.body));
+    expect(body.model).toBe("x/z-image-turbo");
   });
 });

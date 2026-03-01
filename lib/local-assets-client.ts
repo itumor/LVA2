@@ -69,6 +69,7 @@ function resolveListeningText(task: AssetTask) {
 
 export function resolveStaticListeningAudio(task: Pick<AssetTask, "audioRef">) {
   if (!task.audioRef) return null;
+  if (task.audioRef.startsWith("/")) return task.audioRef;
   if (task.audioRef.includes("a_2_limenis_audio.mp3")) return "/media/a_2_limenis_audio.mp3";
   return null;
 }
@@ -128,6 +129,11 @@ function buildImagePrompt(task: AssetTask, question: AssetQuestion) {
 }
 
 export async function ensureListeningAudio(task: AssetTask): Promise<ListeningAssetResult> {
+  const preGeneratedAudio = resolveStaticListeningAudio(task);
+  if (preGeneratedAudio) {
+    return { audioUrl: preGeneratedAudio };
+  }
+
   const text = resolveListeningText(task);
   if (!text) {
     return { audioUrl: null, warning: "No listening text available for TTS generation." };
@@ -183,6 +189,14 @@ export async function ensureGeneratedImage(params: {
   question: AssetQuestion;
   questionId: string;
 }): Promise<ImageAssetResult> {
+  const explicitImageUrl =
+    typeof params.question.imageUrl === "string" && params.question.imageUrl.trim()
+      ? params.question.imageUrl
+      : null;
+  if (explicitImageUrl) {
+    return { imageUrl: explicitImageUrl };
+  }
+
   const prompt = buildImagePrompt(params.task, params.question);
   if (!prompt) {
     return { imageUrl: null, warning: "No image prompt available for generation." };

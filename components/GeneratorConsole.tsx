@@ -31,6 +31,12 @@ type ImportResult = {
   replacedExisting: boolean;
   dbTaskCount: number;
   importedTaskIds: string[];
+  assetStats?: {
+    generatedImages: number;
+    generatedAudio: number;
+    imageFailures: number;
+    audioFailures: number;
+  };
 };
 
 type BatchImportResultItem = {
@@ -42,6 +48,12 @@ type BatchImportResultItem = {
   importedTasks?: number;
   dbTaskCount?: number;
   importedTaskIds?: string[];
+  assetStats?: {
+    generatedImages: number;
+    generatedAudio: number;
+    imageFailures: number;
+    audioFailures: number;
+  };
 };
 
 type BatchImportResult = {
@@ -94,6 +106,7 @@ export function GeneratorConsole() {
   const [concurrency, setConcurrency] = useState(1);
   const [chunkSize, setChunkSize] = useState(1);
   const [replaceExisting, setReplaceExisting] = useState(false);
+  const [preGenerateAssets, setPreGenerateAssets] = useState(true);
   const [requireLlm, setRequireLlm] = useState(true);
 
   const [jobStatus, setJobStatus] = useState<"idle" | "running" | "completed" | "failed">("idle");
@@ -115,7 +128,7 @@ export function GeneratorConsole() {
   const [batchFiles, setBatchFiles] = useState<File[]>([]);
   const [batchImportResult, setBatchImportResult] = useState<BatchImportResult | null>(null);
 
-  const pollTimerRef = useRef<ReturnType<typeof window.setInterval> | null>(null);
+  const pollTimerRef = useRef<number | null>(null);
 
   const examOptions = useMemo(() => payload?.exams ?? [], [payload]);
   const busyGenerate = jobStatus === "running";
@@ -322,6 +335,7 @@ export function GeneratorConsole() {
           payload,
           examId: selectedExamId,
           replaceExisting,
+          preGenerateAssets,
         }),
       });
 
@@ -363,6 +377,7 @@ export function GeneratorConsole() {
       const form = new FormData();
       form.append("mode", "batch");
       form.append("replaceExisting", String(replaceExisting));
+      form.append("preGenerateAssets", String(preGenerateAssets));
       for (const file of batchFiles) {
         form.append("files", file);
       }
@@ -499,6 +514,14 @@ export function GeneratorConsole() {
               />{" "}
               Replace existing tasks
             </label>
+            <label>
+              <input
+                type="checkbox"
+                checked={preGenerateAssets}
+                onChange={(event) => setPreGenerateAssets(event.target.checked)}
+              />{" "}
+              Pre-generate local audio/images
+            </label>
             <button
               type="button"
               className="primaryBtn"
@@ -602,6 +625,12 @@ export function GeneratorConsole() {
             <p>
               Tasks imported: {importResult.importedTasks}; DB tasks for exam: {importResult.dbTaskCount}
             </p>
+            {importResult.assetStats ? (
+              <p>
+                Assets: audio {importResult.assetStats.generatedAudio} (fail {importResult.assetStats.audioFailures}), images{" "}
+                {importResult.assetStats.generatedImages} (fail {importResult.assetStats.imageFailures})
+              </p>
+            ) : null}
             <div className="ctaRow">
               <Link className="secondaryBtn buttonLike" href={`/exam?examId=${encodeURIComponent(importResult.examId)}`}>
                 Open Exam Page
@@ -629,6 +658,7 @@ export function GeneratorConsole() {
                   <th>Exam</th>
                   <th>Imported</th>
                   <th>DB tasks</th>
+                  <th>Assets</th>
                   <th>Error</th>
                 </tr>
               </thead>
@@ -640,6 +670,11 @@ export function GeneratorConsole() {
                     <td>{row.examId ?? "-"}</td>
                     <td>{row.importedTasks ?? "-"}</td>
                     <td>{row.dbTaskCount ?? "-"}</td>
+                    <td>
+                      {row.assetStats
+                        ? `A:${row.assetStats.generatedAudio}/${row.assetStats.audioFailures} I:${row.assetStats.generatedImages}/${row.assetStats.imageFailures}`
+                        : "-"}
+                    </td>
                     <td>{row.error ?? "-"}</td>
                   </tr>
                 ))}

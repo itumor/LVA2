@@ -28,6 +28,7 @@ export async function POST(request: Request) {
       }
 
       const replaceExisting = parseBoolean(form.get("replaceExisting") ?? undefined, true);
+      const preGenerateAssets = parseBoolean(form.get("preGenerateAssets") ?? undefined, false);
       const parsedItems: Array<{ fileName: string; payload: ReturnType<typeof parseGeneratedOutput> }> = [];
       const failedParseResults: Array<{ fileName: string; ok: false; error: string }> = [];
 
@@ -51,7 +52,7 @@ export async function POST(request: Request) {
 
       const importResults = await importGeneratedExamsBatchToDb(
         parsedItems.map((item) => ({ payload: item.payload })),
-        { replaceExisting },
+        { replaceExisting, preGenerateAssets },
       );
 
       const dbCache = new Map<string, { dbTaskCount: number; importedTaskIds: string[] }>();
@@ -85,6 +86,12 @@ export async function POST(request: Request) {
         importedTasks?: number;
         dbTaskCount?: number;
         importedTaskIds?: string[];
+        assetStats?: {
+          generatedImages: number;
+          generatedAudio: number;
+          imageFailures: number;
+          audioFailures: number;
+        };
       }> = [];
 
       for (let index = 0; index < parsedItems.length; index += 1) {
@@ -107,6 +114,7 @@ export async function POST(request: Request) {
           examId: itemResult.examId,
           versionLabel: itemResult.versionLabel,
           importedTasks: itemResult.importedTasks,
+          assetStats: itemResult.assetStats,
           dbTaskCount: dbMeta.dbTaskCount,
           importedTaskIds: dbMeta.importedTaskIds,
         });
@@ -125,7 +133,13 @@ export async function POST(request: Request) {
       });
     }
 
-    const body = (await request.json()) as { filePath?: string; examId?: string; replaceExisting?: boolean; payload?: unknown };
+    const body = (await request.json()) as {
+      filePath?: string;
+      examId?: string;
+      replaceExisting?: boolean;
+      preGenerateAssets?: boolean;
+      payload?: unknown;
+    };
 
     const payloadRaw = body.payload ?? (body.filePath ? JSON.parse(readFileSync(body.filePath, "utf-8")) : null);
     if (!payloadRaw) {
@@ -136,6 +150,7 @@ export async function POST(request: Request) {
     const result = await importGeneratedExamToDb(parsed, {
       examId: body.examId,
       replaceExisting: body.replaceExisting ?? true,
+      preGenerateAssets: body.preGenerateAssets ?? false,
     });
 
     const importedRows = await prisma.taskItem.findMany({
